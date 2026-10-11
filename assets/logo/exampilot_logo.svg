@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B1020" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+    <linearGradient id="checkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22C55E" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background Shield / Squircle -->
+  <rect x="24" y="24" width="464" height="464" rx="100" fill="url(#bgGrad)" stroke="#1E293B" stroke-width="4"/>
+  <rect x="28" y="28" width="456" height="456" rx="96" fill="none" stroke="url(#accentGrad)" stroke-width="2" stroke-opacity="0.3"/>
+
+  <!-- AI Neural Network Nodes & Links in Background -->
+  <g opacity="0.4" stroke="#6366F1" stroke-width="2" fill="none">
+    <line x1="160" y1="180" x2="256" y2="130" />
+    <line x1="352" y1="180" x2="256" y2="130" />
+    <line x1="160" y1="180" x2="256" y2="240" />
+    <line x1="352" y1="180" x2="256" y2="240" />
+    <line x1="256" y1="240" x2="256" y2="330" />
+    <circle cx="160" cy="180" r="4" fill="#06B6D4" />
+    <circle cx="352" cy="180" r="4" fill="#06B6D4" />
+    <circle cx="256" cy="130" r="5" fill="#6366F1" />
+    <circle cx="256" cy="240" r="5" fill="#6366F1" />
+  </g>
+
+  <!-- Academic Cap (Mortarboard Top) Combined with Navigation Wing -->
+  <polygon points="256,120 400,185 256,245 112,185" fill="url(#accentGrad)" filter="url(#glow)"/>
+
+  <!-- Cap Crown Base -->
+  <path d="M 170,210 L 170,270 Q 256,320 342,270 L 342,210 Q 256,255 170,210 Z" fill="#1E1B4B" stroke="#6366F1" stroke-width="3"/>
+
+  <!-- Academic Tassel Ribbon -->
+  <path d="M 380,195 Q 400,240 405,290" fill="none" stroke="#06B6D4" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="405" cy="295" r="7" fill="#06B6D4"/>
+
+  <!-- Dynamic Verification Checkmark (Passing MCQ / Success) -->
+  <g filter="url(#glow)">
+    <path d="M 190,320 L 235,365 L 340,260" fill="none" stroke="url(#checkGrad)" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

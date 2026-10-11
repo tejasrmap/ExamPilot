@@ -1,0 +1,9 @@
+{
+  "name": "com.gtinnox.exampilot",
+  "description": "ExamPilot Native Messaging Host for Windows Desktop Application",
+  "path": "{{HOST_PATH}}",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://{{EXTENSION_ID}}/"
+  ]
+}

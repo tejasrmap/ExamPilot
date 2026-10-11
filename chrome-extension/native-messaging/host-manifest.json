@@ -1,0 +1,9 @@
+{
+  "name": "com.gtinnox.exampilot",
+  "description": "ExamPilot Native Messaging Host for Windows Desktop Application",
+  "path": "C:\\Users\\tejag\\Downloads\\ExamPilot\\scripts\\run_native_host.bat",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://gdamjmdjoeegfhjolmnakjgphlgpckdh/"
+  ]
+}

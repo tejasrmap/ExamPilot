@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "ExamPilot \u2014 AI MCQ Learning Assistant",
+  "version": "1.0.0",
+  "description": "Offline-first AI-powered MCQ practice and explanation assistant by GT InnoX LLP.",
+  "author": "GT InnoX LLP",
+  "permissions": [
+    "nativeMessaging",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon_16.png",
+      "32": "icons/icon_32.png",
+      "48": "icons/icon_48.png",
+      "128": "icons/icon_128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon_16.png",
+    "32": "icons/icon_32.png",
+    "48": "icons/icon_48.png",
+    "128": "icons/icon_128.png"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuiFw3/d10kM2d2Mistk+OtKFjE5ZEYIkBLv8GcD7SiDfws3wFh7/YyVDCUNCEsLX4sqEs7yQjaMuhZFBrjeV66Kycj6odujsgVUS4w/TMIYEnfQQ7mrVok1XXnu31qEQqjGlkSI9plWcEAOV71kJBse64JMj1U61ugxosnn9EzYlI8nJSrocuxvOaawmTEwqp3DkL3ut4e7GRTBXv3HONzn5loFe3PSx5AZuPOaUiAE717RKbbuBJvbPlYcSD6V281a1XXLhKQlsgtwrCfRxetZ5dIHYk7krwpN4K8nT1Wpt8nfZt1snwQXfN//6XGXh+CsN16ZkMewn+OIQSHKHswIDAQAB"
+}

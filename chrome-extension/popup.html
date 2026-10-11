@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ExamPilot Practice Assistant</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <img src="icons/icon_32.png" alt="ExamPilot Logo" class="brand-logo">
+        <div>
+          <h1 class="brand-title">ExamPilot</h1>
+          <span class="brand-tagline">GT InnoX LLP</span>
+        </div>
+      </div>
+      <div id="connectionStatus" class="status-badge disconnected">
+        <span class="dot"></span>
+        <span id="statusText">Checking...</span>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="nav-tabs">
+      <button id="tabCapture" class="tab-btn active">Extract Selection</button>
+      <button id="tabManual" class="tab-btn">Manual Entry</button>
+    </nav>
+
+    <!-- Extraction View -->
+    <section id="captureSection" class="content-section active">
+      <p class="section-desc">Highlight an MCQ on your permitted practice page, then click below:</p>
+      <button id="btnExtract" class="primary-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        </svg>
+        Extract Selected Question
+      </button>
+    </section>
+
+    <!-- Manual Entry View -->
+    <section id="manualSection" class="content-section">
+      <div class="form-group">
+        <label for="inputQuestion">Question Statement:</label>
+        <textarea id="inputQuestion" rows="2" placeholder="e.g. Which data structure follows FIFO?"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Options (at least 2):</label>
+        <div class="option-row">
+          <span class="opt-label">A</span>
+          <input type="text" id="optA" placeholder="Option A (e.g. Stack)">
+        </div>
+        <div class="option-row">
+          <span class="opt-label">B</span>
+          <input type="text" id="optB" placeholder="Option B (e.g. Queue)">
+        </div>
+        <div class="option-row">
+          <span class="opt-label">C</span>
+          <input type="text" id="optC" placeholder="Option C (e.g. Tree)">
+        </div>
+        <div class="option-row">
+          <span class="opt-label">D</span>
+          <input type="text" id="optD" placeholder="Option D (e.g. Graph)">
+        </div>
+      </div>
+      
+      <button id="btnAnalyzeManual" class="primary-btn">Analyze Question with Local AI</button>
+    </section>
+
+    <!-- Loading State -->
+    <div id="loadingIndicator" class="loading-state hidden">
+      <div class="spinner"></div>
+      <p>Running local AI inference...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorBanner" class="error-banner hidden">
+      <span id="errorMessage"></span>
+    </div>
+
+    <!-- Analysis Result View -->
+    <section id="resultSection" class="result-section hidden">
+      <div class="result-header">
+        <div class="answer-badge">
+          Suggested: <strong id="resSuggested">B</strong>
+        </div>
+        <div class="conf-badge">
+          Confidence: <span id="resConfidence">95%</span>
+        </div>
+      </div>
+
+      <div class="result-card">
+        <h3>Explanation</h3>
+        <p id="resExplanation" class="explanation-text"></p>
+      </div>
+
+      <div class="result-card">
+        <h3>Option Analysis</h3>
+        <ul id="resOptionsList" class="options-analysis-list"></ul>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <button id="btnOpenDesktop" class="link-btn">Open ExamPilot Desktop</button>
+      <span class="ver-text">v1.0.0 • Offline-First</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+
