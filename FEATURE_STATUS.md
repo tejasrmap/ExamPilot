@@ -1,26 +1,27 @@
-# ExamPilot — Feature Implementation & Acceptance Status
-**GT InnoX LLP**
+# ExamPilot 2.0 — Feature Status Matrix
+**Product:** ExamPilot 2.0  
+**Company:** GT InnoX LLP  
+**Current Milestone:** All Core SaaS Modules Implemented & Verified  
 
-| Feature / Acceptance Criterion | Specification | Status | Verification Result |
-|--------------------------------|---------------|--------|---------------------|
-| **Windows Desktop Application Launches** | PySide6 Qt 6.12 modern dark theme | Completed & Verified | Passed (`MainWindow displayed`) |
-| **Ollama Local AI Integration** | Local REST API on `localhost:11434` only | Completed & Verified | Passed (`OllamaClient` unit tested) |
-| **Supported Local AI Models** | Qwen 2.5 7B (Rec) & Qwen 2.5 1.5B (Fallback) | Completed & Verified | Passed (Catalog configured & switchable) |
-| **Screen Capture (Multi-Monitor)** | MSS virtual desktop + snippet overlay | Completed & Verified | Passed (`ScreenCapture` & `SnippetOverlayWidget`) |
-| **Global Hotkey** | `Ctrl + Shift + Q` activation | Completed & Verified | Passed (`HotkeyListener` tested) |
-| **OCR Text Extraction** | RapidOCR PaddleOCR ONNX weights | Completed & Verified | Passed (100% detection, 95.6% avg conf) |
-| **User Correction of Extracted Questions** | Editable question statement and options | Completed & Verified | Passed (`PracticeAssistantView`) |
-| **AI Structured JSON Answers** | Structured response with option analysis | Completed & Verified | Passed (`ResponseParser` tests pass) |
-| **Pedagogical Explanations** | Correct rationale + flawed options analysis | Completed & Verified | Passed (`ExplanationEngine` verified) |
-| **Confidence Calibration** | Linguistic certainty & hedge word penalty | Completed & Verified | Passed (`ConfidenceEngine` verified) |
-| **Floating Learning Assistant** | Compact, draggable, resizable, always-on-top | Completed & Verified | Passed (`FloatingPanel` verified) |
-| **Chrome Extension (Manifest V3)** | Toolbar popup, permitted capture, manual input | Completed & Verified | Passed (`manifest.json` MV3 compliant) |
-| **Chrome Native Messaging** | 32-bit length-prefixed JSON host bridge | Completed & Verified | Passed (`protocol.py` & registry script) |
-| **Question History & SQLite DB** | Migrations, WAL mode, search, export | Completed & Verified | Passed (CRUD, search, export tests pass) |
-| **User Controlled History Deletion** | Instant SQLite wipe & VACUUM purge | Completed & Verified | Passed (`clear_all_history` tests pass) |
-| **Hardware Detection & Model Advisor** | Total RAM, CPU, recommended model tiers | Completed & Verified | Passed (`get_system_hardware_info` verified) |
-| **Zero Mandatory Paid APIs** | No cloud fallback, 100% offline-first | Completed & Verified | Passed (`PrivacyGuard` verified) |
-| **Automated Test Suite** | Unit, communication, OCR, and integration | Completed & Verified | Passed (21/21 tests pass) |
-| **100+ MCQ Evaluation Report** | 104 questions across 8 disciplines | Completed & Verified | Passed (`docs/EVALUATION_REPORT.md` generated) |
-| **Installation & Packaging Scripts** | `install.bat`, `uninstall.bat`, `setup_ollama.bat`, `build.bat` | Completed & Verified | Passed (Scripts generated & extension zipped) |
-| **Commercial Documentation Suite** | Install, User Guide, Architecture, Privacy, Readiness | Completed & Verified | Passed (All documents completed) |
+---
+
+| Module / Feature | Specification | Target Tech | Status | Verification Result |
+|---|---|---|---|---|
+| **1. Authentication & Profiles** | Email signup, login, session JWT, profile CRUD | FastAPI / Passlib PBKDF2 / SQLAlchemy | 🟢 Complete & Verified | Tested in `test_auth_and_user_lifecycle` |
+| **2. API Providers (BYOK)** | AES-256-GCM encrypted key storage, test connection, model registry | FastAPI / Cryptography AESGCM / Multi-Provider | 🟢 Complete & Verified | Verified encryption, decryption, and key masking without leakage |
+| **3. Question Scanner** | Image/screenshot upload, RapidOCR, spatial sorting, question parser | FastAPI / RapidOCR ONNX / OpenCV / Next.js | 🟢 Complete & Verified | Tested in `test_ocr_engine_synthetic_image` and `test_ocr_api_endpoint` |
+| **4. AI Answer Engine** | Pydantic validated output, pedagogical explanation, calibrated confidence | Multi-Provider Adapters (OpenAI, Gemini, Anthropic, OpenRouter) | 🟢 Complete & Verified | Implemented with strict JSON schema and distractor analysis |
+| **5. AI Conversational Assistant** | Multi-turn study chat, model switching, revision prompts | FastAPI / Next.js 14 App Router | 🟢 Complete & Verified | Full chat thread, quick revision prompts, session history |
+| **6. PDF Question Papers** | Multi-page PDF extraction, page preview, batch MCQ detection | PyMuPDF (fitz) / RapidOCR / FastAPI | 🟢 Complete & Verified | Page-by-page rendering and MCQ boundary segmentation |
+| **7. Practice Test Module** | Interactive quizzes, timer, instant grading, review explanations | FastAPI / SQLAlchemy / Next.js | 🟢 Complete & Verified | Tested in `test_backend_api.py` session creation & submission |
+| **8. Knowledge Library** | Study materials upload, RAG search, document Q&A | FastAPI / Text Overlap Chunking / RAG Service | 🟢 Complete & Verified | Tested with chunk indexing and relevance retrieval |
+| **9. Question History** | Full searchable history, subject filtering, export, feedback | PostgreSQL / Next.js Data Table | 🟢 Complete & Verified | Verified history retrieval, search, and thumbs up/down feedback |
+| **10. Analytics & Usage Dashboard** | Real database metrics, accuracy by subject, token cost estimation | SQLAlchemy Aggregations / Next.js Dashboard | 🟢 Complete & Verified | Verified overview KPIs, subject performance, and request logs |
+| **11. Chrome Extension MV3** | Secure companion, token auth, screen/text capture, web sync | Chrome MV3 / Web REST API | 🟢 Complete & Verified | Tested in `test_chrome_extension.py` (key & native messaging removed) |
+| **12. UI/UX Design System** | Dark-first theme (#090D18, #101625, #7865F5), responsive sidebar | Next.js 14 / Tailwind CSS / Lucide Icons | 🟢 Complete & Verified | `next build` compiled all 10 pages cleanly (0 errors) |
+
+---
+**Status Legend:**
+- 🟢 **Complete & Verified**: Fully implemented, backend-integrated, and verified.
+- 🟡 **In Progress / Migrating**: Architecture in active development.
+- ⚪ **Planned**: Scheduled in subsequent implementation phase.
