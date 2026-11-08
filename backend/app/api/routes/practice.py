@@ -1,0 +1,186 @@
+import json
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from sqlalchemy import desc, func
+from pydantic import BaseModel
+from backend.app.db.session import get_db
+from backend.app.db.models import Profile, PracticeSession, PracticeAnswer, Question, Subject
+from backend.app.core.deps import get_current_user
+
+router = APIRouter(prefix="/practice", tags=["Practice Tests"])
+
+class CreateTestRequest(BaseModel):
+    title: str = "Practice Quiz"
+    subject: Optional[str] = None
+    question_count: int = 5
+    time_limit_minutes: Optional[int] = 10
+
+class SubmitAnswerItem(BaseModel):
+    question_id: str
+    selected_answer: str
+
+class SubmitTestRequest(BaseModel):
+    session_id: str
+    answers: List[SubmitAnswerItem]
+
+@router.get("", response_model=List[Dict[str, Any]])
+def list_practice_sessions(
+    current_user: Profile = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    sessions = db.query(PracticeSession).filter(
+        PracticeSession.user_id == current_user.id
+    ).order_by(desc(PracticeSession.started_at)).all()
+
+    return [
+        {
+            "id": s.id,
+            "title": s.title,
+            "subject_name": s.subject_name or "General",
+            "total_questions": s.total_questions,
+            "correct_answers": s.correct_answers,
+            "score_percentage": s.score_percentage,
+            "started_at": s.started_at,
+            "completed_at": s.completed_at
+        }
+        for s in sessions
+    ]
+
+@router.post("", response_model=Dict[str, Any])
+def create_practice_test(
+    req: CreateTestRequest,
+    current_user: Profile = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Select available questions from user history or seed
+    query = db.query(Question).filter(Question.user_id == current_user.id)
+    if req.subject and req.subject != "All":
+        query = query.filter(Question.subject_name == req.subject)
+
+    questions = query.order_by(func.random()).limit(req.question_count).all()
+
+    # If user doesn't have enough saved questions, pull any questions in the system or generate default
+    if not questions:
+        # Fallback to any questions or sample
+        questions = db.query(Question).order_by(func.random()).limit(req.question_count).all()
+
+    if not questions:
+        # Generate a seed practice question on the fly if brand new account
+        seed_opts = {
+            "A": "Branch Target Buffer predicts target branch addresses in the instruction fetch stage.",
+            "B": "Branch Target Buffer only stores return stack addresses.",
+            "C": "Branch Target Buffer is used for cache coherency.",
+            "D": "Branch Target Buffer must wait for instruction decode before acting."
+        }
+        seed_q = Question(
+            user_id=current_user.id,
+            question_text="Please check all answers that apply to Branch Target Buffer (BTB).",
+            options_json=json.dumps(seed_opts),
+            suggested_answer="A",
+            answer_text=seed_opts["A"],
+            explanation="The BTB is indexed by the Program Counter (PC) during the fetch stage to predict the target address of branches without waiting for instruction decode.",
+            confidence_level="high",
+            confidence_reason="Standard computer architecture principle (Patterson & Hennessy).",
+            subject_name="Computer Science"
+        )
+        db.add(seed_q)
+        db.commit()
+        db.refresh(seed_q)
+        questions = [seed_q]
+
+    session = PracticeSession(
+        user_id=current_user.id,
+        title=req.title,
+        subject_name=req.subject or "Comprehensive Practice",
+        total_questions=len(questions),
+        time_limit_minutes=req.time_limit_minutes,
+        started_at=datetime.utcnow()
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+
+    # Return question items without revealing the answers until submit
+    test_questions = []
+    for q in questions:
+        opts = json.loads(q.options_json) if q.options_json else {}
+        test_questions.append({
+            "id": q.id,
+            "question_text": q.question_text,
+            "options": opts,
+            "subject": q.subject_name
+        })
+
+    return {
+        "session_id": session.id,
+        "title": session.title,
+        "total_questions": len(test_questions),
+        "time_limit_minutes": session.time_limit_minutes,
+        "questions": test_questions
+    }
+
+@router.post("/submit", response_model=Dict[str, Any])
+def submit_practice_test(
+    req: SubmitTestRequest,
+    current_user: Profile = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    session = db.query(PracticeSession).filter(
+        PracticeSession.id == req.session_id,
+        PracticeSession.user_id == current_user.id
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Practice session not found")
+
+    correct_count = 0
+    results = []
+
+    for item in req.answers:
+        q = db.query(Question).filter(Question.id == item.question_id).first()
+        if not q:
+            continue
+        
+        is_correct = (item.selected_answer.strip().upper() == (q.suggested_answer or "").strip().upper())
+        if is_correct:
+            correct_count += 1
+
+        ans_entry = PracticeAnswer(
+            session_id=session.id,
+            question_id=q.id,
+            selected_answer=item.selected_answer.strip().upper(),
+            is_correct=is_correct,
+            explanation=q.explanation
+        )
+        db.add(ans_entry)
+
+        opts = json.loads(q.options_json) if q.options_json else {}
+        results.append({
+            "question_id": q.id,
+            "question_text": q.question_text,
+            "options": opts,
+            "selected_answer": item.selected_answer.strip().upper(),
+            "correct_answer": q.suggested_answer,
+            "is_correct": is_correct,
+            "explanation": q.explanation
+        })
+
+    total = len(req.answers) if req.answers else session.total_questions
+    percentage = round((correct_count / max(total, 1)) * 100.0, 1)
+
+    session.correct_answers = correct_count
+    session.total_questions = total
+    session.score_percentage = percentage
+    session.completed_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "session_id": session.id,
+        "total_questions": total,
+        "correct_answers": correct_count,
+        "score_percentage": percentage,
+        "completed_at": session.completed_at,
+        "results": results
+    }
+
