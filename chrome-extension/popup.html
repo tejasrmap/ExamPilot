@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>ExamPilot Practice Assistant</title>
+  <title>ExamPilot 2.0 Companion</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -12,31 +12,39 @@
       <div class="brand">
         <img src="icons/icon_32.png" alt="ExamPilot Logo" class="brand-logo">
         <div>
-          <h1 class="brand-title">ExamPilot</h1>
+          <h1 class="brand-title">ExamPilot <span class="badge-version">2.0</span></h1>
           <span class="brand-tagline">GT InnoX LLP</span>
         </div>
       </div>
-      <div id="connectionStatus" class="status-badge disconnected">
+      <div id="connectionStatus" class="status-badge connected">
         <span class="dot"></span>
-        <span id="statusText">Checking...</span>
+        <span id="statusText">Cloud SaaS</span>
       </div>
     </header>
 
     <!-- Tab Navigation -->
     <nav class="nav-tabs">
-      <button id="tabCapture" class="tab-btn active">Extract Selection</button>
-      <button id="tabManual" class="tab-btn">Manual Entry</button>
+      <button id="tabCapture" class="tab-btn active">Screen Capture</button>
+      <button id="tabManual" class="tab-btn">Manual MCQ</button>
+      <button id="tabConfig" class="tab-btn">Settings</button>
     </nav>
 
-    <!-- Extraction View -->
+    <!-- Capture View -->
     <section id="captureSection" class="content-section active">
-      <p class="section-desc">Highlight an MCQ on your permitted practice page, then click below:</p>
-      <button id="btnExtract" class="primary-btn">
+      <p class="section-desc">Capture current page view and solve with cloud AI:</p>
+      <button id="btnCaptureScreen" class="primary-btn">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="22" y1="12" x2="18" y2="12"/>
+          <line x1="6" y1="12" x2="2" y2="12"/>
+          <line x1="12" y1="6" x2="12" y2="2"/>
+          <line x1="12" y1="22" x2="12" y2="18"/>
         </svg>
-        Extract Selected Question
+        Capture Visible Tab Screenshot
+      </button>
+
+      <button id="btnExtractSelectedText" class="secondary-btn" style="margin-top: 8px;">
+        Extract Highlighted Text
       </button>
     </section>
 
@@ -44,36 +52,49 @@
     <section id="manualSection" class="content-section">
       <div class="form-group">
         <label for="inputQuestion">Question Statement:</label>
-        <textarea id="inputQuestion" rows="2" placeholder="e.g. Which data structure follows FIFO?"></textarea>
+        <textarea id="inputQuestion" rows="2" placeholder="e.g. Which register holds PC?"></textarea>
       </div>
 
       <div class="form-group">
-        <label>Options (at least 2):</label>
+        <label>Options (A - D):</label>
         <div class="option-row">
           <span class="opt-label">A</span>
-          <input type="text" id="optA" placeholder="Option A (e.g. Stack)">
+          <input type="text" id="optA" placeholder="Option A text">
         </div>
         <div class="option-row">
           <span class="opt-label">B</span>
-          <input type="text" id="optB" placeholder="Option B (e.g. Queue)">
+          <input type="text" id="optB" placeholder="Option B text">
         </div>
         <div class="option-row">
           <span class="opt-label">C</span>
-          <input type="text" id="optC" placeholder="Option C (e.g. Tree)">
+          <input type="text" id="optC" placeholder="Option C text">
         </div>
         <div class="option-row">
           <span class="opt-label">D</span>
-          <input type="text" id="optD" placeholder="Option D (e.g. Graph)">
+          <input type="text" id="optD" placeholder="Option D text">
         </div>
       </div>
       
-      <button id="btnAnalyzeManual" class="primary-btn">Analyze Question with Local AI</button>
+      <button id="btnAnalyzeManual" class="primary-btn">Solve with Cloud AI</button>
+    </section>
+
+    <!-- Settings / Auth Config View -->
+    <section id="configSection" class="content-section">
+      <div class="form-group">
+        <label for="backendUrlInput">Backend API URL:</label>
+        <input type="text" id="backendUrlInput" value="http://127.0.0.1:8000/api">
+      </div>
+      <div class="form-group">
+        <label for="authTokenInput">Bearer Auth Token:</label>
+        <input type="password" id="authTokenInput" placeholder="Paste your SaaS session token">
+      </div>
+      <button id="btnSaveConfig" class="secondary-btn">Save Configuration</button>
     </section>
 
     <!-- Loading State -->
     <div id="loadingIndicator" class="loading-state hidden">
       <div class="spinner"></div>
-      <p>Running local AI inference...</p>
+      <p id="loadingMsg">Running OCR & AI provider inference...</p>
     </div>
 
     <!-- Error State -->
@@ -88,7 +109,7 @@
           Suggested: <strong id="resSuggested">B</strong>
         </div>
         <div class="conf-badge">
-          Confidence: <span id="resConfidence">95%</span>
+          Confidence: <span id="resConfidence">High</span>
         </div>
       </div>
 
@@ -98,19 +119,20 @@
       </div>
 
       <div class="result-card">
-        <h3>Option Analysis</h3>
+        <h3>Option Breakdown</h3>
         <ul id="resOptionsList" class="options-analysis-list"></ul>
       </div>
     </section>
 
     <!-- Footer -->
     <footer class="footer">
-      <button id="btnOpenDesktop" class="link-btn">Open ExamPilot Desktop</button>
-      <span class="ver-text">v1.0.0 • Offline-First</span>
+      <a href="http://localhost:3000" target="_blank" id="btnOpenWeb" class="link-btn">
+        Open ExamPilot 2.0 Web Platform &rarr;
+      </a>
+      <span class="ver-text">v2.0.0 &bull; Cloud SaaS</span>
     </footer>
   </div>
 
   <script src="popup.js"></script>
 </body>
 </html>
-
