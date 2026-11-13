@@ -32,8 +32,11 @@ class QuestionItemResponse(BaseModel):
     id: str
     question_text: str
     options: Dict[str, str]
+    structured_options: Optional[List[Dict[str, Any]]] = None
     suggested_answer: Optional[str] = None
     answer_text: Optional[str] = None
+    original_label: Optional[str] = None
+    source_position: Optional[int] = None
     explanation: Optional[str] = None
     option_analysis: Optional[Dict[str, str]] = None
     confidence_level: Optional[str] = None
@@ -176,10 +179,19 @@ async def analyse_question(
         db.commit()
         db.refresh(subject_record)
 
+    # Serialize structured options if present
+    structured_json = None
+    if result.structured_options:
+        structured_json = json.dumps([
+            o.model_dump() if hasattr(o, "model_dump") else (o.dict() if hasattr(o, "dict") else o)
+            for o in result.structured_options
+        ])
+
     question_record = Question(
         user_id=current_user.id,
         question_text=req.question_text,
         options_json=json.dumps(req.options),
+        structured_options_json=structured_json,
         suggested_answer=result.suggested_answer,
         answer_text=result.answer_text,
         explanation=result.explanation,
@@ -237,12 +249,39 @@ def get_questions_history(
         except Exception:
             op_ana = {}
 
+        structured_opts = None
+        orig_lbl = None
+        src_pos = None
+
+        if getattr(r, "structured_options_json", None):
+            try:
+                structured_opts = json.loads(r.structured_options_json)
+            except Exception:
+                structured_opts = None
+
+        if structured_opts:
+            match = next((
+                o for o in structured_opts
+                if o.get("internal_label") == r.suggested_answer
+                or (o.get("text") and r.answer_text and o.get("text").strip().lower() == r.answer_text.strip().lower())
+            ), None)
+            if match:
+                orig_lbl = match.get("original_label")
+                src_pos = match.get("source_order")
+        else:
+            if r.suggested_answer and len(r.suggested_answer) == 1 and r.suggested_answer.isalpha():
+                src_pos = ord(r.suggested_answer.upper()) - ord('A') + 1
+                orig_lbl = r.suggested_answer
+
         results.append(QuestionItemResponse(
             id=r.id,
             question_text=r.question_text,
             options=opts,
+            structured_options=structured_opts,
             suggested_answer=r.suggested_answer,
             answer_text=r.answer_text,
+            original_label=orig_lbl,
+            source_position=src_pos,
             explanation=r.explanation,
             option_analysis=op_ana,
             confidence_level=r.confidence_level,
@@ -267,13 +306,40 @@ def get_question(
     ).first()
     if not q:
         raise HTTPException(status_code=404, detail="Question not found")
-    
+
+    structured_opts = None
+    orig_lbl = None
+    src_pos = None
+
+    if getattr(q, "structured_options_json", None):
+        try:
+            structured_opts = json.loads(q.structured_options_json)
+        except Exception:
+            structured_opts = None
+
+    if structured_opts:
+        match = next((
+            o for o in structured_opts
+            if o.get("internal_label") == q.suggested_answer
+            or (o.get("text") and q.answer_text and o.get("text").strip().lower() == q.answer_text.strip().lower())
+        ), None)
+        if match:
+            orig_lbl = match.get("original_label")
+            src_pos = match.get("source_order")
+    else:
+        if q.suggested_answer and len(q.suggested_answer) == 1 and q.suggested_answer.isalpha():
+            src_pos = ord(q.suggested_answer.upper()) - ord('A') + 1
+            orig_lbl = q.suggested_answer
+
     return QuestionItemResponse(
         id=q.id,
         question_text=q.question_text,
         options=json.loads(q.options_json) if q.options_json else {},
+        structured_options=structured_opts,
         suggested_answer=q.suggested_answer,
         answer_text=q.answer_text,
+        original_label=orig_lbl,
+        source_position=src_pos,
         explanation=q.explanation,
         option_analysis=json.loads(q.option_analysis_json) if q.option_analysis_json else {},
         confidence_level=q.confidence_level,

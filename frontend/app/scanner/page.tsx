@@ -3,6 +3,13 @@
 import { useState, useRef } from "react";
 import { api, QuestionAnalysis } from "@/lib/api";
 import { 
+  formatClipboardAnswer, 
+  formatAnswerBadge, 
+  handleOptionTextChange, 
+  addOptionItem, 
+  removeOptionItem 
+} from "@/lib/optionIdentity";
+import { 
   ScanLine, 
   UploadCloud, 
   Sparkles, 
@@ -101,50 +108,15 @@ export default function ScannerPage() {
 
   const handleOptionChange = (key: string, value: string) => {
     setOptions(prev => ({ ...prev, [key]: value }));
-    setStructuredOptions(prev => {
-      const idx = prev.findIndex(o => o.internal_label === key);
-      if (idx !== -1) {
-        const updated = [...prev];
-        updated[idx] = {
-          ...updated[idx],
-          text: value,
-          is_user_edited: true
-        };
-        return updated;
-      }
-      return [
-        ...prev,
-        {
-          id: `opt_${Date.now()}_${key}`,
-          text: value,
-          original_label: null,
-          internal_label: key,
-          source_order: prev.length + 1,
-          confidence: 1.0,
-          is_user_edited: true
-        }
-      ];
-    });
+    setStructuredOptions(prev => handleOptionTextChange(prev, key, value));
   };
 
   const addOption = () => {
-    const keys = ["A", "B", "C", "D", "E", "F", "G", "H"];
     const existing = Object.keys(options);
-    const nextKey = keys.find(k => !existing.includes(k));
+    const { nextKey, updated } = addOptionItem(structuredOptions, existing);
     if (nextKey) {
       setOptions(prev => ({ ...prev, [nextKey]: "" }));
-      setStructuredOptions(prev => [
-        ...prev,
-        {
-          id: `opt_${Date.now()}_${nextKey}`,
-          text: "",
-          original_label: null,
-          internal_label: nextKey,
-          source_order: prev.length + 1,
-          confidence: 1.0,
-          is_user_edited: true
-        }
-      ]);
+      setStructuredOptions(updated);
     }
   };
 
@@ -152,10 +124,7 @@ export default function ScannerPage() {
     const updated = { ...options };
     delete updated[key];
     setOptions(updated);
-    setStructuredOptions(prev => {
-      const filtered = prev.filter(o => o.internal_label !== key);
-      return filtered.map((o, idx) => ({ ...o, source_order: idx + 1 }));
-    });
+    setStructuredOptions(prev => removeOptionItem(prev, key));
   };
 
   const handleAnalyze = async () => {
@@ -199,10 +168,7 @@ export default function ScannerPage() {
 
   const copyExplanation = () => {
     if (!analysisResult) return;
-    const header = analysisResult.original_label
-      ? `Correct Answer: Option ${analysisResult.original_label}: ${analysisResult.answer_text}`
-      : `Correct Answer: ${analysisResult.answer_text} (Item #${analysisResult.source_position || 1})`;
-    const txt = `${header}\n\nExplanation:\n${analysisResult.explanation}`;
+    const txt = formatClipboardAnswer(analysisResult);
     navigator.clipboard.writeText(txt);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -379,9 +345,7 @@ export default function ScannerPage() {
             <div className="flex items-center gap-3">
               <span className="px-3.5 py-1.5 rounded-lg bg-success/20 text-success font-extrabold text-sm border border-success/30 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4" />
-                {analysisResult.original_label
-                  ? `Suggested Answer: Option ${analysisResult.original_label}`
-                  : `Suggested Answer: ${analysisResult.answer_text} (Item #${analysisResult.source_position || 1})`}
+                {formatAnswerBadge(analysisResult)}
               </span>
               <span className="text-xs px-2.5 py-1 rounded bg-[#101625] text-muted border border-cardBorder">
                 Subject: {analysisResult.subject}

@@ -87,10 +87,21 @@ CREATE POLICY "Users access own settings" ON user_settings
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # Check if structured_options_json exists in questions table; if not, add it safely
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    if "questions" in inspector.get_table_names():
+        columns = [c["name"] for c in inspector.get_columns("questions")]
+        if "structured_options_json" not in columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE questions ADD COLUMN structured_options_json TEXT"))
+                conn.commit()
     # Save the Supabase RLS SQL migration file
     os.makedirs("backend/migrations", exist_ok=True)
     with open("backend/migrations/001_supabase_rls.sql", "w", encoding="utf-8") as f:
         f.write(SUPABASE_RLS_SQL)
+    with open("backend/migrations/002_add_structured_options_json.sql", "w", encoding="utf-8") as f:
+        f.write("ALTER TABLE questions ADD COLUMN IF NOT EXISTS structured_options_json TEXT;\n")
     print("Database tables initialized successfully and RLS migration generated.")
 
 if __name__ == "__main__":

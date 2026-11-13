@@ -130,7 +130,9 @@ export default function HistoryPage() {
                 </p>
                 <span className="shrink-0 px-3 py-1.5 rounded-lg bg-success/20 text-success font-extrabold text-xs border border-success/30 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Option {q.suggested_answer}
+                  {q.original_label
+                    ? `Option ${q.original_label}`
+                    : `${q.answer_text} (Item #${q.source_position || 1})`}
                 </span>
               </div>
 

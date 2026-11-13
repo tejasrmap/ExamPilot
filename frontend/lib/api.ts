@@ -47,8 +47,11 @@ export interface QuestionRecord {
   id: string;
   question_text: string;
   options: Record<string, string>;
+  structured_options?: any[] | null;
   suggested_answer: string;
   answer_text: string;
+  original_label?: string | null;
+  source_position?: number | null;
   explanation: string;
   option_analysis: Record<string, string>;
   confidence_level: string;

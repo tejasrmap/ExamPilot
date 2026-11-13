@@ -68,6 +68,7 @@ class Question(Base):
     user_id = Column(String(36), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     question_text = Column(Text, nullable=False)
     options_json = Column(Text, nullable=False) # JSON encoded dict: {"A": "...", "B": "..."}
+    structured_options_json = Column(Text, nullable=True) # JSON encoded list of OptionIdentity dicts
     suggested_answer = Column(String(10), nullable=True) # "A", "B", "C", "D"
     answer_text = Column(Text, nullable=True)
     explanation = Column(Text, nullable=True)
