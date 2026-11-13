@@ -30,6 +30,18 @@ REQUIRED JSON FORMAT:
 }
 """
 
+DATA_SCIENCE_GUIDANCE = """AUTHORITATIVE CURRICULUM DEFINITIONS:
+- Data Life Cycle Phases (in exact chronological order):
+  1. PLAN: Decide what data is needed, establish objectives, and determine who is responsible.
+  2. CAPTURE: Collect, acquire, and import raw data from diverse sources.
+  3. MANAGE: Store, safeguard, maintain, protect, and organize data properly.
+  4. ANALYZE: Process, clean, model, calculate, and extract actionable insights.
+  5. ARCHIVE: Long-term preservation of historical/inactive data.
+  6. DESTROY: Secure deletion and permanent purging.
+- Database: A computer software system used by organizations to securely store, organize, query, and retrieve data.
+- Data Ecosystem: The broad interconnected infrastructure of hardware, software, services, and cloud tools that produce and consume data.
+"""
+
 def build_analysis_user_prompt(
     question_text: str,
     options: Dict[str, str],
@@ -37,6 +49,9 @@ def build_analysis_user_prompt(
     context_material: Optional[str] = None
 ) -> str:
     prompt = f"SUBJECT / DOMAIN: {subject or 'General / Academic'}\n\n"
+    full_str = f"{question_text} {' '.join(options.values())}".lower()
+    if (subject and "data" in subject.lower()) or any(kw in full_str for kw in ["data life cycle", "data team", "safeguard", "data ecosystem", "database"]):
+        prompt += f"{DATA_SCIENCE_GUIDANCE}\n"
     if context_material:
         prompt += f"REFERENCE STUDY CONTEXT:\n{context_material}\n\n"
     

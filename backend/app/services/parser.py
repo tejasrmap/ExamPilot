@@ -28,6 +28,22 @@ class QuestionParser:
         re.IGNORECASE
     )
 
+    # Instruction prefix headers (e.g. "Fill in the blank:", "Consider the following:")
+    INSTRUCTION_PREFIX = re.compile(
+        r"^(?:(?:\d+[\.\)]\s*)?(?:fill\s+in\s+the\s+blanks?|consider\s+the\s+following|answer\s+the\s+following|for\s+questions?\s*\d+|select\s+the\s+best\s+answer|read\s+the\s+following|choose\s+the\s+correct\s+option)[\:\.]?)$",
+        re.IGNORECASE
+    )
+
+    DANGLING_WORDS = {
+        "the", "a", "an", "of", "to", "in", "for", "with", "on", "at", "from",
+        "by", "about", "as", "into", "like", "through", "after", "over", "between",
+        "out", "against", "during", "without", "before", "under", "around", "among",
+        "and", "or", "but", "nor", "so", "yet", "is", "are", "was", "were", "be",
+        "been", "being", "have", "has", "had", "do", "does", "did", "will", "would",
+        "shall", "should", "may", "might", "must", "can", "could", "who", "which",
+        "that", "whose", "whom", "where", "when"
+    }
+
     # Standard letter/roman option prefixes: "A)", "(A)", "A.", "[A]", "A -", "A: ", "i.", "(i)"
     OPTION_PATTERN = re.compile(
         r"^(?:(?:\(?([A-Ga-g]|(?:i|ii|iii|iv|v|vi))\s*(?:[\)\:\-\;\}]|\.(?!\d))\s*|\(([A-Ga-g]|(?:i|ii|iii|iv|v|vi))\)\s*|\[([A-Ga-g])\]\s*))(.*)$",
@@ -83,45 +99,57 @@ class QuestionParser:
         Determines the 0-based line index where the question statement ends.
         Lines strictly after this index are candidate options.
         """
-        # 1. Look for explicit question mark '?'
-        q_marks = [i for i, l in enumerate(lines) if "?" in l]
-        if q_marks:
-            return q_marks[-1]
+        if len(lines) <= 2:
+            return 0
 
-        # 2. Look for fill-in-the-blank placeholders ('_____', '___', 'blank')
-        blank_indices = [i for i, l in enumerate(lines) if re.search(r"_{2,}|\bblank\b", l, re.IGNORECASE)]
-        if blank_indices:
-            # The question continues until the sentence with the blank terminates with '.'
-            for i in range(blank_indices[0], len(lines)):
+        # 1. Look for explicit question mark '?' where 2 to 6 candidate option lines remain
+        for i in range(len(lines) - 1, -1, -1):
+            if "?" in lines[i]:
+                rem = len(lines) - 1 - i
+                if 2 <= rem <= 6:
+                    return i
+                # Check for an instruction line right after '?' e.g. "Select one:"
+                if i + 1 < len(lines) and lines[i + 1].rstrip().endswith(":"):
+                    rem2 = len(lines) - 1 - (i + 1)
+                    if 2 <= rem2 <= 6:
+                        return i + 1
+
+        # 2. Look for fill-in-the-blank placeholders ('_____', '___')
+        blank_indices = [i for i, l in enumerate(lines) if re.search(r"_{2,}", l)]
+        actual_blanks = [i for i in blank_indices if not self.INSTRUCTION_PREFIX.match(lines[i])]
+        if actual_blanks:
+            for i in range(actual_blanks[0], len(lines)):
                 if lines[i].rstrip().endswith("."):
                     rem = len(lines) - 1 - i
-                    if 2 <= rem <= 8:
+                    if 2 <= rem <= 6:
                         return i
-            rem = len(lines) - 1 - blank_indices[-1]
-            if 2 <= rem <= 8:
-                return blank_indices[-1]
 
         # 2b. If line 0 is a standalone question prefix with complete sentence ending in '.' or ':'
         if self.QUESTION_PREFIX_PATTERN.match(lines[0]) and lines[0].rstrip().endswith((".", ":")):
-            if not re.search(r"^(?:\d+[\.\)]\s*)?(?:fill\s+in\s+the\s+blank|consider\s+the\s+following|for\s+problems?)\s*[\:\.]?$", lines[0], re.IGNORECASE):
+            if not self.INSTRUCTION_PREFIX.match(lines[0]) and not re.search(r"_{2,}", lines[0]):
                 rem = len(lines) - 1
                 if 2 <= rem <= 8:
                     return 0
 
-        # 3. Look for the last line ending with a period '.' or colon ':' where remaining lines (2 to 8) are options
+        # 3. Look for the last line ending with a period '.' or colon ':' where remaining lines (2 to 6) are options
         for i in range(len(lines) - 3, -1, -1):
             if lines[i].rstrip().endswith((".", ":")):
-                rem = len(lines) - 1 - i
-                if 2 <= rem <= 8:
-                    return i
+                if not self.INSTRUCTION_PREFIX.match(lines[i]):
+                    rem = len(lines) - 1 - i
+                    if 2 <= rem <= 6:
+                        return i
 
-        # 4. Default: If lines total >= 3, bottom 4 (or 2-5) lines are options
-        if len(lines) >= 3:
-            for opt_count in (4, 3, 5, 2):
-                if len(lines) > opt_count:
-                    candidate = len(lines) - opt_count - 1
-                    if not lines[candidate].rstrip().lower().endswith(("be", "the", "to", "of", "and", "or", "in", "that", "with", "for", "a", "an", ",", ";")):
-                        return candidate
+        # 4. Fallback: Check candidate option counts: prefer 4 (standard MCQ), then 3, 5, 2
+        for opt_count in (4, 3, 5, 2):
+            if len(lines) > opt_count:
+                cand_end = len(lines) - opt_count - 1
+                if self.INSTRUCTION_PREFIX.match(lines[cand_end]):
+                    continue
+                cand_line = lines[cand_end].rstrip().lower()
+                words = cand_line.split()
+                if words and words[-1].strip(".,;:?!") in self.DANGLING_WORDS:
+                    continue
+                return cand_end
 
         return 0
 
@@ -153,7 +181,12 @@ class QuestionParser:
         current_option_label: Optional[str] = None
         current_option_text: List[str] = []
 
-        has_explicit_letters = any(self.OPTION_PATTERN.match(l) for l in lines)
+        explicit_matches = [self.OPTION_PATTERN.match(l) for l in lines if self.OPTION_PATTERN.match(l)]
+        found_labels = [
+            (m.group(1) or m.group(2) or m.group(3) or "").strip().upper()
+            for m in explicit_matches
+        ]
+        has_explicit_letters = ('A' in found_labels) or len(set(found_labels)) >= 2
         has_checkboxes = any(self.CHECKBOX_PATTERN.match(l) for l in lines)
         has_inline = any(len(list(self.INLINE_OPTION_SPLIT.finditer(l))) >= 2 for l in lines)
         next_auto_label = 'A'

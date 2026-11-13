@@ -131,3 +131,4 @@ def test_noisy_image_preprocessing():
     # Upscaled with Lanczos
     assert processed.width >= 600
     assert processed.height >= 300
+

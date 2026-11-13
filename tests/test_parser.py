@@ -231,3 +231,41 @@ def test_parse_code_snippet_multiline_options():
     assert len(result["options"]) == 4
     assert "R2 contains the loop iteration variable" in result["options"]["A"]
     assert "R2 contains the pointer" in result["options"]["C"]
+
+def test_parse_coursera_fill_in_the_blank_multiline():
+    parser = QuestionParser()
+    text = """
+    2. Fill in the blank: During the
+    ___ phase, data teams decide what kind of data is needed and who will be
+    responsible for it.
+    analyze
+    planning
+    capture
+    manage
+    """
+    result = parser.parse_from_text(text)
+    assert "During the ___ phase, data teams decide" in result["question"]
+    assert "responsible for it" in result["question"]
+    assert len(result["options"]) == 4
+    assert result["options"]["A"] == "analyze"
+    assert result["options"]["B"] == "planning"
+    assert result["options"]["C"] == "capture"
+    assert result["options"]["D"] == "manage"
+
+def test_parse_coursera_data_life_cycle_scenario():
+    parser = QuestionParser()
+    text = """
+    3. A data team considers how and where data will be stored, what tools are required to safeguard it, and how to
+    maintain it properly. What phase of the data life cycle does this scenario describe?
+    Archive
+    Capture
+    Analyze
+    Manage
+    """
+    result = parser.parse_from_text(text)
+    assert "A data team considers how and where data will be stored" in result["question"]
+    assert len(result["options"]) == 4
+    assert result["options"]["A"] == "Archive"
+    assert result["options"]["B"] == "Capture"
+    assert result["options"]["C"] == "Analyze"
+    assert result["options"]["D"] == "Manage"

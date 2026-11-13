@@ -76,6 +76,8 @@ def build_mcq_prompt(question_text: str, options: Dict[str, str], subject: str =
     formatted_options = "\n".join([f"{k}: {v}" for k, v in sorted(options.items())])
     
     guidance = DOMAIN_GUIDANCE.get(subject, "")
+    if not guidance and any(kw in f"{question_text} {' '.join(options.values())}".lower() for kw in ["data life cycle", "data team", "safeguard", "data ecosystem", "database"]):
+        guidance = DOMAIN_GUIDANCE.get("Data Science", "")
     guidance_block = f"\n{guidance}\n" if guidance else ""
 
     prompt = f"""Subject Domain: {subject}{guidance_block}

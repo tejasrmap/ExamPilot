@@ -159,3 +159,4 @@ def test_unauthorized_endpoints():
         else:
             r = client.post(path)
         assert r.status_code == 401, f"Path {path} did not enforce 401 Unauthorized"
+

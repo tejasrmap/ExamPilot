@@ -174,7 +174,11 @@ class FloatingPanel(QWidget):
         ans_text = data.get("answer_text", "")
         detected_subj = data.get("detected_subject", "")
         prefix = f"[{detected_subj}] " if detected_subj else ""
-        self.lbl_suggested.setText(f"{prefix}Option {suggested} ({truncate_text(ans_text, 28)})")
+        if ans_text and ans_text.lower() != f"option {suggested}".lower():
+            display_title = f"{prefix}{ans_text} (Option {suggested})"
+        else:
+            display_title = f"{prefix}Option {suggested}"
+        self.lbl_suggested.setText(truncate_text(display_title, 42))
         self.conf_meter.set_confidence(data.get("confidence", 0.85))
         self.lbl_explanation.setText(data.get("explanation", ""))
 

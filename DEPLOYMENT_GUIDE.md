@@ -95,3 +95,4 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 3. Enable **Developer mode** (toggle in upper right).
 4. Click **Load unpacked** and select the `chrome-extension` folder.
 5. In popup settings, configure your production API URL (`https://api.exampilot.gtinnox.com/api`).
+

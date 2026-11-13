@@ -35,3 +35,4 @@
 ### 3.1 Unpermitted Exam Portals
 - **Observation**: Certain locked exam browsers (such as Safe Exam Browser) disable all browser extensions by design.
 - **Handling**: ExamPilot 2.0 is designed as a practice and learning assistant. It does not attempt to circumvent system-level kiosk lockdown software.
+

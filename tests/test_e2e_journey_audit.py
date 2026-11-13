@@ -133,3 +133,4 @@ def test_complete_end_to_end_user_journey():
     subject_res = client.get("/api/analytics/subjects", headers=headers)
     assert subject_res.status_code == 200
     assert len(subject_res.json()["subjects"]) >= 1
+

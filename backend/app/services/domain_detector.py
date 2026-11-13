@@ -41,8 +41,10 @@ DOMAIN_PATTERNS = [
     (
         "Data Science",
         re.compile(
-            r"\b(?:data\s+life\s+cycle|data\s+team|safeguard|data\s+analytics|data\s+analysis|analytics|"
-            r"data\s+ecosystem|data\s+cleaning|data\s+storage|dataset|etl|data\s+warehouse|data\s+lake|"
+            r"\b(?:data\s+life\s*cycles?|data\s+teams?|safeguard|data\s+analytics|data\s+analysis|analytics|"
+            r"data\s+ecosystems?|data\s+cleaning|data\s+storage|dataset|etl|data\s+warehouse|data\s+lake|"
+            r"data\s+management|data\s+curriculum|data\s+governance|data\s+practitioners?|data\s+professionals?|"
+            r"plan(?:ning)?\s+phase|capture\s+phase|manage\s+phase|analy(?:ze|sis)\s+phase|archive\s+phase|destroy\s+phase|"
             r"big\s+data|tableau|power\s+bi|sql|metadata|data\s+integrity|data\s+security|"
             r"machine\s+learning|deep\s+learning|regression|neural\s+network|gradient\s+descent|overfitting|"
             r"underfitting|training\s+set|test\s+set|pandas|dataframe|scikit|cross-validation|hyperparameter|"
