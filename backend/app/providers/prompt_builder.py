@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 
 ANALYSIS_SYSTEM_PROMPT = """You are ExamPilot 2.0, a world-class academic tutor and MCQ analysis engine developed by GT InnoX LLP.
 Your mission is to understand questions, verify evidence, evaluate all multiple-choice options with strict pedagogical rigor, and provide definitive explanations.
@@ -17,6 +17,7 @@ REQUIRED JSON FORMAT:
   "suggested_answer": "Option letter, e.g. B",
   "answer_text": "Exact text of the correct option",
   "explanation": "Clear, comprehensive pedagogical explanation",
+  "evidence": "Authoritative curriculum standard definition or theoretical proof supporting the solution",
   "option_analysis": {
     "A": "Specific reason why option A is correct or incorrect",
     "B": "Specific reason why option B is correct or incorrect"
@@ -26,6 +27,8 @@ REQUIRED JSON FORMAT:
     "reason": "Clear supporting theoretical evidence from core principles"
   },
   "subject": "Detected academic discipline",
+  "is_ambiguous": false,
+  "ambiguity_details": [],
   "needs_review": false
 }
 """
@@ -46,7 +49,8 @@ def build_analysis_user_prompt(
     question_text: str,
     options: Dict[str, str],
     subject: Optional[str] = None,
-    context_material: Optional[str] = None
+    context_material: Optional[str] = None,
+    structured_options: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     prompt = f"SUBJECT / DOMAIN: {subject or 'General / Academic'}\n\n"
     full_str = f"{question_text} {' '.join(options.values())}".lower()

@@ -24,6 +24,7 @@ CRITICAL INSTRUCTIONS & REASONING PROCESS:
 REQUIRED JSON FORMAT (generate keys in this exact order):
 {
   "reasoning": "<foundational domain definition, sequence, or formula fulfilling the question>",
+  "evidence": "<authoritative curriculum standard definition or theoretical proof supporting the solution>",
   "option_analysis": {
     "<Option letter>": "<factual evaluation of this option>",
     ...
@@ -32,6 +33,7 @@ REQUIRED JSON FORMAT (generate keys in this exact order):
   "answer_text": "<exact content of the selected option>",
   "explanation": "<clear educational breakdown explaining the correct answer>",
   "confidence": <float between 0.0 and 1.0>,
+  "is_ambiguous": <true or false>,
   "needs_review": <true or false>
 }
 """

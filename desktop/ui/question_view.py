@@ -27,15 +27,16 @@ class AIWorker(QThread):
     """Background worker for non-blocking local AI inference."""
     finished = Signal(bool, object, str)
 
-    def __init__(self, question: str, options: dict, subject: str):
+    def __init__(self, question: str, options: dict, subject: str, structured_options: Optional[list] = None):
         super().__init__()
         self.question = question
         self.options = options
         self.subject = subject
+        self.structured_options = structured_options
 
     def run(self):
         success, result, error = answer_engine.analyze(
-            self.question, self.options, subject=self.subject
+            self.question, self.options, subject=self.subject, structured_options=self.structured_options
         )
         self.finished.emit(success, result, error)
 
@@ -510,6 +511,7 @@ class PracticeAssistantView(QWidget):
                 QMessageBox.critical(self, "Error", f"Failed to load image: {e}")
 
     def populate_parsed_data(self, parsed: dict):
+        self.last_parsed = parsed
         self.txt_question.setPlainText(parsed.get("question", ""))
         opts = parsed.get("options", {})
         
@@ -545,7 +547,8 @@ class PracticeAssistantView(QWidget):
         self.btn_analyze.setEnabled(False)
         self.progress_bar.show()
 
-        self.worker = AIWorker(question_text, options, subj)
+        structured_opts = getattr(self, "last_parsed", {}).get("structured_options")
+        self.worker = AIWorker(question_text, options, subj, structured_options=structured_opts)
         self.worker.finished.connect(self._on_ai_finished)
         self.worker.start()
 

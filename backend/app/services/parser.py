@@ -71,12 +71,12 @@ class QuestionParser:
 
     def parse_from_lines(self, lines: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Parse structured MCQ data from OCR line items.
+        Parse structured MCQ data from OCR line items preserving line-level confidence.
         Each item has 'text' and 'confidence'.
         """
         raw_strings = [item["text"] for item in lines if item.get("text")]
         combined_text = "\n".join(raw_strings)
-        parsed = self.parse_from_text(combined_text)
+        parsed = self.parse_from_text(combined_text, lines_metadata=lines)
 
         # Average confidence from OCR lines
         scores = [item["confidence"] for item in lines if "confidence" in item and item["confidence"] is not None]
@@ -145,25 +145,33 @@ class QuestionParser:
                 cand_end = len(lines) - opt_count - 1
                 if self.INSTRUCTION_PREFIX.match(lines[cand_end]):
                     continue
-                cand_line = lines[cand_end].rstrip().lower()
-                words = cand_line.split()
-                if words and words[-1].strip(".,;:?!") in self.DANGLING_WORDS:
-                    continue
                 return cand_end
 
         return 0
 
-    def parse_from_text(self, text: str) -> Dict[str, Any]:
+    def parse_from_text(self, text: str, lines_metadata: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
-        Parse unstructured text into structured MCQ with comprehensive validation.
+        Parse unstructured text into structured MCQ with stable option identity and comprehensive validation.
+        Option representation preserves:
+          - id (e.g. opt_1)
+          - text
+          - original_label (None if unlettered radio buttons, 'A'/'B' if visible)
+          - internal_label (internal key for downstream model queries)
+          - source_order (1, 2, 3...)
+          - confidence (OCR confidence if available)
+          - is_user_edited (False by default)
         """
         if not text or not text.strip():
             return {
                 "question": "",
                 "options": {},
+                "structured_options": [],
+                "has_original_labels": False,
                 "raw_text": "",
                 "confidence": 0.0,
                 "needs_correction": True,
+                "is_ambiguous": True,
+                "ambiguity_details": ["No text provided to parse."],
                 "missing_options": [],
                 "duplicate_options": [],
                 "validation_issues": ["No text provided to parse."],
@@ -177,9 +185,10 @@ class QuestionParser:
         lines = [l for l in raw_lines if not self.POINTS_PATTERN.match(l)]
 
         question_lines: List[str] = []
-        options: Dict[str, str] = {}
-        current_option_label: Optional[str] = None
-        current_option_text: List[str] = []
+        
+        # Intermediate tracking for option records
+        options_records: List[Dict[str, Any]] = []
+        current_option_idx: Optional[int] = None
 
         explicit_matches = [self.OPTION_PATTERN.match(l) for l in lines if self.OPTION_PATTERN.match(l)]
         found_labels = [
@@ -205,174 +214,238 @@ class QuestionParser:
                     if q_prefix:
                         question_lines.append(q_prefix)
 
-                if current_option_label:
-                    options[current_option_label] = " ".join(current_option_text).strip()
-                    current_option_text = []
-                    current_option_label = None
+                current_option_idx = None
 
                 for i, m in enumerate(inline_matches):
                     lbl_raw = m.group(1) or m.group(2) or m.group(3) or ""
-                    norm_lbl = self._normalize_label(lbl_raw)
+                    clean_orig = re.sub(r"[\(\)\[\]\:\-\.\s]", "", lbl_raw).strip()
+                    norm_lbl = self._normalize_label(clean_orig)
                     start_pos = m.end()
                     end_pos = inline_matches[i+1].start() if i + 1 < len(inline_matches) else len(line)
                     val = line[start_pos:end_pos].strip()
-                    options[norm_lbl] = val
+                    
+                    options_records.append({
+                        "internal_label": norm_lbl,
+                        "original_label": clean_orig.upper(),
+                        "source_order": len(options_records) + 1,
+                        "text_parts": [val] if val else [],
+                        "line_indices": [idx]
+                    })
                 continue
 
             # 1. First line / prior to question statement:
-            # If line matches question prefix e.g. "1. ", "Q1: ", strip it and treat as question
-            if not question_lines and current_option_label is None and self.QUESTION_PREFIX_PATTERN.match(line):
+            if not question_lines and current_option_idx is None and self.QUESTION_PREFIX_PATTERN.match(line):
                 cleaned_q = self.QUESTION_PREFIX_PATTERN.sub("", line).strip()
                 if cleaned_q:
                     question_lines.append(cleaned_q)
                 continue
 
-            # 1b. Assembly code / label check: never treat instructions or labels as option starters
+            # 1b. Assembly code / label check
             if self.CODE_INSTRUCTION_PATTERN.match(line):
-                if current_option_label is not None:
-                    current_option_text.append(line)
+                if current_option_idx is not None:
+                    options_records[current_option_idx]["text_parts"].append(line)
+                    options_records[current_option_idx]["line_indices"].append(idx)
                 else:
                     question_lines.append(line)
                 continue
 
-            # 2. Checkbox / bullet option matching e.g. [ ], [x], 口, •, -
+            # 2. Explicit letter option prefix (A., A), (A), [A]) - checked before checkboxes
+            if has_explicit_letters:
+                letter_match = self.OPTION_PATTERN.match(line)
+                if letter_match:
+                    raw_lbl = letter_match.group(1) or letter_match.group(2) or letter_match.group(3) or ""
+                    clean_orig = re.sub(r"[\(\)\[\]\:\-\.\s]", "", raw_lbl).strip()
+                    norm_lbl = self._normalize_label(clean_orig)
+                    opt_content = letter_match.group(4).strip()
+                    
+                    options_records.append({
+                        "internal_label": norm_lbl,
+                        "original_label": clean_orig.upper(),
+                        "source_order": len(options_records) + 1,
+                        "text_parts": [opt_content] if opt_content else [],
+                        "line_indices": [idx]
+                    })
+                    current_option_idx = len(options_records) - 1
+                    continue
+
+            # 3. Checkbox / bullet option matching e.g. [ ], [x], 口, •, -
             cb_match = self.CHECKBOX_PATTERN.match(line)
             if cb_match:
-                if current_option_label:
-                    options[current_option_label] = " ".join(current_option_text).strip()
-                    current_option_text = []
-
-                current_option_label = next_auto_label
+                norm_lbl = next_auto_label
                 next_auto_label = chr(ord(next_auto_label) + 1)
                 opt_content = cb_match.group(1).strip()
-                if opt_content:
-                    current_option_text.append(opt_content)
-                continue
 
-            # 3. Explicit letter option prefix (A., A), (A), [A])
-            letter_match = self.OPTION_PATTERN.match(line)
-            if letter_match:
-                if current_option_label:
-                    options[current_option_label] = " ".join(current_option_text).strip()
-                    current_option_text = []
-
-                raw_lbl = letter_match.group(1) or letter_match.group(2) or letter_match.group(3) or ""
-                current_option_label = self._normalize_label(raw_lbl)
-                opt_content = letter_match.group(4).strip()
-                if opt_content:
-                    current_option_text.append(opt_content)
+                options_records.append({
+                    "internal_label": norm_lbl,
+                    "original_label": None,  # Checkboxes are unlettered: never invent option letters
+                    "source_order": len(options_records) + 1,
+                    "text_parts": [opt_content] if opt_content else [],
+                    "line_indices": [idx]
+                })
+                current_option_idx = len(options_records) - 1
                 continue
 
             # 4. Numbered option (1., 2., 3., 4.) when question statement already exists
             if len(question_lines) > 0:
                 num_match = self.NUM_OPTION_PATTERN.match(line)
                 if num_match:
-                    if current_option_label:
-                        options[current_option_label] = " ".join(current_option_text).strip()
-                        current_option_text = []
-
                     raw_num = num_match.group(1) or num_match.group(2) or num_match.group(3) or ""
-                    current_option_label = self._normalize_label(raw_num)
+                    clean_orig = raw_num.strip()
+                    norm_lbl = self._normalize_label(clean_orig)
                     opt_content = num_match.group(4).strip()
-                    if opt_content:
-                        current_option_text.append(opt_content)
+
+                    options_records.append({
+                        "internal_label": norm_lbl,
+                        "original_label": clean_orig,
+                        "source_order": len(options_records) + 1,
+                        "text_parts": [opt_content] if opt_content else [],
+                        "line_indices": [idx]
+                    })
+                    current_option_idx = len(options_records) - 1
                     continue
 
             # 5. Un-lettered option fallback:
-            # ONLY apply if there are NO explicit letters/checkboxes anywhere
             if not has_explicit_letters and not has_checkboxes and not has_inline:
                 if question_end_idx >= 0:
                     if idx <= question_end_idx:
                         question_lines.append(line)
                         continue
                     else:
-                        if current_option_label:
-                            options[current_option_label] = " ".join(current_option_text).strip()
-                            current_option_text = []
-
-                        current_option_label = next_auto_label
+                        norm_lbl = next_auto_label
                         next_auto_label = chr(ord(next_auto_label) + 1)
-                        current_option_text.append(line)
+
+                        options_records.append({
+                            "internal_label": norm_lbl,
+                            "original_label": None,  # Unlettered options: never invent option letters
+                            "source_order": len(options_records) + 1,
+                            "text_parts": [line],
+                            "line_indices": [idx]
+                        })
+                        current_option_idx = len(options_records) - 1
                         continue
 
             # 6. Continuation line:
-            if current_option_label is not None:
-                current_option_text.append(line)
+            if current_option_idx is not None:
+                options_records[current_option_idx]["text_parts"].append(line)
+                options_records[current_option_idx]["line_indices"].append(idx)
             else:
                 question_lines.append(line)
 
-        # Flush final option
-        if current_option_label:
-            options[current_option_label] = " ".join(current_option_text).strip()
+        # Build structured options with identity
+        structured_options: List[Dict[str, Any]] = []
+        options_dict: Dict[str, str] = {}
+
+        for rec in options_records:
+            opt_text = " ".join(rec["text_parts"]).strip()
+            opt_conf = None
+            if lines_metadata:
+                matched_scores = []
+                for line_i in rec["line_indices"]:
+                    if 0 <= line_i < len(lines_metadata) and "confidence" in lines_metadata[line_i]:
+                        c_val = lines_metadata[line_i]["confidence"]
+                        if c_val is not None:
+                            matched_scores.append(float(c_val))
+                if matched_scores:
+                    opt_conf = round(sum(matched_scores) / len(matched_scores), 3)
+
+            opt_obj = {
+                "id": f"opt_{rec['source_order']}",
+                "text": opt_text,
+                "original_label": rec["original_label"],
+                "internal_label": rec["internal_label"],
+                "source_order": rec["source_order"],
+                "confidence": opt_conf,
+                "is_user_edited": False
+            }
+            structured_options.append(opt_obj)
+            options_dict[rec["internal_label"]] = opt_text
+
+        has_original_labels = any(opt["original_label"] is not None for opt in structured_options)
 
         # Combine question text and strip standard question prefixes like "Q1: ", "1. "
         question_str = " ".join(question_lines).strip()
         question_str = self.QUESTION_PREFIX_PATTERN.sub("", question_str).strip()
 
-        # Validation Checks
+        # Validation Checks & Ambiguity Detection
         validation_issues: List[str] = []
         missing_options: List[str] = []
         duplicate_options: List[str] = []
+        ambiguity_details: List[str] = []
 
         # 1. Incomplete Question check
         if not question_str or len(question_str) < 5:
-            validation_issues.append("Question statement is missing or suspiciously short (< 5 characters).")
+            issue = "Question statement is missing or suspiciously short (< 5 characters)."
+            validation_issues.append(issue)
+            ambiguity_details.append(issue)
         elif len(question_str) < 15 and not any(c in question_str for c in ["?", ":", "="]):
-            validation_issues.append("Question statement may be incomplete.")
+            issue = "Question statement may be incomplete."
+            validation_issues.append(issue)
+            ambiguity_details.append(issue)
+
+        # 1b. Missing placeholder check in fill-in-the-blank questions
+        clean_prompt = re.sub(r"\bfill\s+in\s+the\s+blanks?[\:\.]?\s*", "", question_str, flags=re.IGNORECASE).strip()
+        if re.search(r"\bfill\s+in\s+the\s+blanks?\b", question_str, re.IGNORECASE) and not re.search(r"_{2,}|\[blank\]|\bblank\b|\.{3,}", clean_prompt, re.IGNORECASE):
+            issue = "Fill-in-the-blank prompt lacks a blank placeholder (___)."
+            validation_issues.append(issue)
+            ambiguity_details.append(issue)
 
         # 2. Options count check
-        if len(options) < 2:
-            validation_issues.append(f"Insufficient options detected ({len(options)} found). Multiple choice requires at least 2.")
+        if len(structured_options) < 2:
+            issue = f"Insufficient options detected ({len(structured_options)} found). Multiple choice requires at least 2."
+            validation_issues.append(issue)
+            ambiguity_details.append(issue)
 
-        # 3. Gap / Missing options check (e.g. found A, B, D -> C is missing!)
-        sorted_keys = sorted(options.keys())
-        if sorted_keys and all(len(k) == 1 and k.isalpha() for k in sorted_keys):
-            first_ord = ord(sorted_keys[0].upper())
-            last_ord = ord(sorted_keys[-1].upper())
-            # Check for non-sequential gaps
-            full_expected = [chr(c) for c in range(ord('A'), last_ord + 1)]
-            for exp in full_expected:
-                if exp not in options and exp < sorted_keys[-1].upper():
-                    missing_options.append(exp)
-                    validation_issues.append(f"Missing intermediate option '{exp}' detected.")
-        elif sorted_keys and all(k.isdigit() for k in sorted_keys):
-            int_keys = sorted(int(k) for k in sorted_keys)
-            full_expected_int = list(range(1, int_keys[-1] + 1))
-            for exp_int in full_expected_int:
-                exp_str = str(exp_int)
-                if exp_str not in options and exp_int < int_keys[-1]:
-                    missing_options.append(exp_str)
-                    validation_issues.append(f"Missing intermediate option '{exp_str}' detected.")
+        # 3. Gap / Missing options check (only applicable if original letters were present)
+        if has_original_labels:
+            sorted_keys = sorted(options_dict.keys())
+            if sorted_keys and all(len(k) == 1 and k.isalpha() for k in sorted_keys):
+                last_ord = ord(sorted_keys[-1].upper())
+                full_expected = [chr(c) for c in range(ord('A'), last_ord + 1)]
+                for exp in full_expected:
+                    if exp not in options_dict and exp < sorted_keys[-1].upper():
+                        missing_options.append(exp)
+                        issue = f"Missing intermediate option '{exp}' detected."
+                        validation_issues.append(issue)
+                        ambiguity_details.append(issue)
 
         # 4. Duplicate option values check
         seen_values: Dict[str, str] = {}
-        for opt_key, opt_val in options.items():
+        for opt_key, opt_val in options_dict.items():
             norm_val = re.sub(r"\s+", " ", opt_val.strip().lower())
             if norm_val:
                 if norm_val in seen_values:
                     dup_pair = f"{seen_values[norm_val]} & {opt_key}"
                     duplicate_options.append(dup_pair)
-                    validation_issues.append(f"Duplicate option text found between {dup_pair} ('{opt_val}').")
+                    issue = f"Duplicate option text found between {dup_pair} ('{opt_val}')."
+                    validation_issues.append(issue)
+                    ambiguity_details.append(issue)
                 else:
                     seen_values[norm_val] = opt_key
 
         # 5. Empty option content check
-        for opt_key, opt_val in list(options.items()):
+        for opt_key, opt_val in list(options_dict.items()):
             if not opt_val.strip():
-                validation_issues.append(f"Option '{opt_key}' has empty text.")
+                issue = f"Option '{opt_key}' has empty text."
+                validation_issues.append(issue)
+                ambiguity_details.append(issue)
 
+        is_ambiguous = len(ambiguity_details) > 0
         needs_correction = len(validation_issues) > 0
         confidence = 0.90 if not needs_correction else max(0.20, round(0.85 - (0.15 * len(validation_issues)), 2))
         error_msg = "; ".join(validation_issues) if validation_issues else None
 
-        logger.debug(f"Question parser extracted {len(options)} options. Issues: {len(validation_issues)}")
+        logger.debug(f"Question parser extracted {len(structured_options)} options. Issues: {len(validation_issues)}")
 
         return {
             "question": question_str,
-            "options": options,
+            "options": options_dict,
+            "structured_options": structured_options,
+            "has_original_labels": has_original_labels,
             "raw_text": text,
             "confidence": confidence,
             "needs_correction": needs_correction,
+            "is_ambiguous": is_ambiguous,
+            "ambiguity_details": ambiguity_details,
             "missing_options": missing_options,
             "duplicate_options": duplicate_options,
             "validation_issues": validation_issues,

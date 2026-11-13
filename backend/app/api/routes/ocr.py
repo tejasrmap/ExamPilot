@@ -67,8 +67,12 @@ async def scan_image(
         "lines": ocr_result["lines"],
         "parsed_question": parsed_mcq.get("question") or "",
         "options": parsed_mcq.get("options") or {},
+        "structured_options": parsed_mcq.get("structured_options") or [],
+        "has_original_labels": parsed_mcq.get("has_original_labels", False),
         "detected_domain": detected_domain,
         "validation_issues": parsed_mcq.get("validation_issues") or [],
+        "is_ambiguous": parsed_mcq.get("is_ambiguous", False),
+        "ambiguity_details": parsed_mcq.get("ambiguity_details") or [],
         "needs_correction": parsed_mcq.get("needs_correction", False)
     }
 

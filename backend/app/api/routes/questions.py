@@ -10,14 +10,15 @@ from backend.app.db.models import Profile, Question, APIProvider, UsageLog, Subj
 from backend.app.core.deps import get_current_user
 from backend.app.core.security import decrypt_api_key
 from backend.app.providers.registry import provider_registry
-from backend.app.providers.base import QuestionAnalysisResult
-from backend.app.services.domain_detector import detect_domain
+from backend.app.providers.base import QuestionAnalysisResult, OptionIdentity
+from backend.app.services.domain_detector import detect_domain, detect_domain_with_details
 
 router = APIRouter(prefix="/questions", tags=["Question Analysis & History"])
 
 class AnalyseQuestionRequest(BaseModel):
     question_text: str
     options: Dict[str, str]
+    structured_options: Optional[List[Dict[str, Any]]] = None
     subject: Optional[str] = None
     provider: Optional[str] = None
     model: Optional[str] = None
@@ -54,8 +55,9 @@ async def analyse_question(
     if len(req.options) < 2:
         raise HTTPException(status_code=400, detail="At least two answer options are required for MCQ analysis.")
 
-    # 1. Determine Subject / Domain
-    detected_subject = req.subject or detect_domain(req.question_text)
+    # 1. Determine Subject / Domain with Curriculum Details
+    domain_details = detect_domain_with_details(req.question_text, req.options)
+    detected_subject = req.subject or domain_details["subject"]
 
     # 2. Select Provider and Model
     target_provider_name = req.provider.lower().strip() if req.provider else None
@@ -114,6 +116,24 @@ async def analyse_question(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"AI Provider error ({target_provider}): {str(e)}"
         )
+
+    # Enrich result with stable option identity and curriculum evidence
+    result.subject = detected_subject
+    result.subject_confidence = domain_details.get("subject_confidence", 0.80)
+    result.curriculum_confidence = domain_details.get("curriculum_confidence", 0.0)
+    if not result.evidence:
+        result.evidence = domain_details.get("evidence")
+
+    if req.structured_options:
+        result.structured_options = [
+            OptionIdentity(**o) if isinstance(o, dict) else o for o in req.structured_options
+        ]
+        matching_opt = next((o for o in req.structured_options if o.get("internal_label") == result.suggested_answer), None)
+        if matching_opt:
+            result.original_label = matching_opt.get("original_label")
+            result.source_position = matching_opt.get("source_order")
+    else:
+        result.source_position = (ord(result.suggested_answer.upper()) - ord('A') + 1) if len(result.suggested_answer) == 1 and result.suggested_answer.isalpha() else None
 
     # 5. Persist Question to History
     # Find or create subject record
