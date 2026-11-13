@@ -313,10 +313,13 @@ export default function ScannerPage() {
             <div className="flex items-center gap-3">
               <span className="px-3.5 py-1.5 rounded-lg bg-success/20 text-success font-extrabold text-sm border border-success/30 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4" />
-                Suggested Answer: Option {analysisResult.suggested_answer}
+                {analysisResult.original_label
+                  ? `Suggested Answer: Option ${analysisResult.original_label}`
+                  : `Suggested Answer: ${analysisResult.answer_text} (Item #${analysisResult.source_position || 1})`}
               </span>
               <span className="text-xs px-2.5 py-1 rounded bg-[#101625] text-muted border border-cardBorder">
                 Subject: {analysisResult.subject}
+                {analysisResult.curriculum_confidence ? ` (${Math.round(analysisResult.curriculum_confidence * 100)}% standard)` : ""}
               </span>
             </div>
 
@@ -339,10 +342,38 @@ export default function ScannerPage() {
             </div>
           </div>
 
+          {/* Review Banner if Ambiguous or Low Confidence */}
+          {(analysisResult.needs_review || analysisResult.is_ambiguous) && (
+            <div className="p-4 rounded-xl bg-warning/10 border border-warning/30 text-warning text-xs space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4" /> Review Recommended: Question Ambiguity / Low Extraction Confidence
+              </p>
+              <p className="text-muted leading-relaxed">
+                {analysisResult.ambiguity_details && analysisResult.ambiguity_details.length > 0
+                  ? analysisResult.ambiguity_details.join("; ")
+                  : "Please cross-check extracted options against the source document."}
+              </p>
+            </div>
+          )}
+
+          {/* Curriculum Evidence Banner */}
+          {analysisResult.evidence && (
+            <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+              <p className="text-xs font-bold text-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <HelpCircle className="w-3.5 h-3.5" /> Authoritative Curriculum Standard Evidence
+              </p>
+              <p className="text-xs text-foreground font-medium leading-relaxed">
+                {analysisResult.evidence}
+              </p>
+            </div>
+          )}
+
           {/* Correct Option Banner */}
           <div className="p-4 rounded-xl bg-success/10 border border-success/20">
             <p className="text-xs font-bold text-success uppercase tracking-wider mb-1">
-              Correct Answer Text
+              {analysisResult.original_label
+                ? `Correct Answer (Option ${analysisResult.original_label})`
+                : `Correct Answer Text (Item #${analysisResult.source_position || 1})`}
             </p>
             <p className="text-sm font-semibold text-foreground">
               {analysisResult.answer_text}

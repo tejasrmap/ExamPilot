@@ -172,13 +172,22 @@ class FloatingPanel(QWidget):
         self.set_processing(False)
         suggested = data.get("suggested_answer", "-")
         ans_text = data.get("answer_text", "")
+        orig_lbl = data.get("original_label")
+        src_pos = data.get("source_position")
         detected_subj = data.get("detected_subject", "")
         prefix = f"[{detected_subj}] " if detected_subj else ""
-        if ans_text and ans_text.lower() != f"option {suggested}".lower():
-            display_title = f"{prefix}{ans_text} (Option {suggested})"
+        
+        # Distinguish between genuine original label vs unlettered options
+        if orig_lbl:
+            display_title = f"{prefix}Option {orig_lbl}: {ans_text}"
+        elif src_pos and ans_text:
+            display_title = f"{prefix}{ans_text} (Item #{src_pos})"
+        elif ans_text:
+            display_title = f"{prefix}{ans_text}"
         else:
             display_title = f"{prefix}Option {suggested}"
-        self.lbl_suggested.setText(truncate_text(display_title, 42))
+
+        self.lbl_suggested.setText(truncate_text(display_title, 48))
         self.conf_meter.set_confidence(data.get("confidence", 0.85))
         self.lbl_explanation.setText(data.get("explanation", ""))
 
@@ -188,10 +197,44 @@ class FloatingPanel(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
+        # Evidence banner if curriculum evidence exists
+        evidence = data.get("evidence")
+        if evidence:
+            ev_lbl = QLabel(f"📖 Standard Evidence: {evidence}")
+            ev_lbl.setWordWrap(True)
+            ev_lbl.setFont(QFont("Segoe UI", 8))
+            ev_lbl.setStyleSheet(f"color: {COLORS['accent_secondary']}; background: {COLORS['bg_secondary']}; padding: 6px; border-radius: 4px;")
+            self.options_vbox.addWidget(ev_lbl)
+
+        # Ambiguity / Review banner if flagged
+        if data.get("needs_review") or data.get("is_ambiguous"):
+            reasons = "; ".join(data.get("ambiguity_details", [])) or "Question ambiguity or low extraction confidence detected."
+            warn_lbl = QLabel(f"⚠️ Review Needed: {reasons}")
+            warn_lbl.setWordWrap(True)
+            warn_lbl.setFont(QFont("Segoe UI", 8))
+            warn_lbl.setStyleSheet("color: #F59E0B; background: rgba(245, 158, 11, 0.1); padding: 6px; border-radius: 4px;")
+            self.options_vbox.addWidget(warn_lbl)
+
+        # Options Breakdown
         analysis = data.get("option_analysis", {})
-        for opt, exp in sorted(analysis.items()):
-            is_correct = (opt == suggested)
-            opt_lbl = QLabel(f"• Option {opt}: {exp}")
+        structured_opts = data.get("structured_options", [])
+        opt_meta_by_key = {opt.get("internal_label", ""): opt for opt in structured_opts}
+
+        for opt_key, exp in sorted(analysis.items()):
+            meta = opt_meta_by_key.get(opt_key, {})
+            opt_orig = meta.get("original_label")
+            opt_pos = meta.get("source_order")
+            opt_text = meta.get("text", "")
+            is_correct = (opt_key == suggested) or (opt_orig and opt_orig == orig_lbl)
+
+            if opt_orig:
+                bullet = f"• Option {opt_orig}: {exp}"
+            elif opt_pos:
+                bullet = f"• [#{opt_pos}] {opt_text}: {exp}" if opt_text else f"• [#{opt_pos}]: {exp}"
+            else:
+                bullet = f"• {exp}"
+
+            opt_lbl = QLabel(bullet)
             opt_lbl.setWordWrap(True)
             opt_lbl.setFont(QFont("Segoe UI", 8))
             opt_lbl.setStyleSheet(f"color: {COLORS['success'] if is_correct else COLORS['text_muted']};")
