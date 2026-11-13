@@ -59,6 +59,7 @@ def test_question_parser_variations():
     assert len(res2["options"]) == 4
 
 def test_ocr_api_endpoint():
+    # 1. Unauthenticated request must be rejected with 401
     img = Image.new("RGB", (600, 200), color=(255, 255, 255))
     draw = ImageDraw.Draw(img)
     draw.text((20, 20), "What is RAM?\nA) Random Access Memory\nB) Read Access Memory", fill=(0, 0, 0))
@@ -66,8 +67,22 @@ def test_ocr_api_endpoint():
     img.save(buf, format="PNG")
     buf.seek(0)
 
+    unauth_resp = client.post(
+        "/api/ocr/image",
+        files={"file": ("test_mcq.png", buf.getvalue(), "image/png")}
+    )
+    assert unauth_resp.status_code == 401, "Unauthenticated OCR request must be rejected"
+
+    # 2. Authenticated user request succeeds
+    email = "ocr_test_auth@exampilot.com"
+    pwd = "SecurePassword123!"
+    reg = client.post("/api/auth/register", json={"email": email, "password": pwd})
+    token = reg.json()["access_token"] if reg.status_code == 200 else client.post("/api/auth/login", json={"email": email, "password": pwd}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     response = client.post(
         "/api/ocr/image",
+        headers=headers,
         files={"file": ("test_mcq.png", buf.getvalue(), "image/png")}
     )
     assert response.status_code == 200
