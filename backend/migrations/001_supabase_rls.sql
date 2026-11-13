@@ -1,9 +1,12 @@
 
 -- ExamPilot 2.0 Row Level Security (RLS) Policies for Supabase PostgreSQL
 -- Enforces strict user tenant isolation across all tables
+-- Architecture Note: FastAPI backend acts as trusted authorization boundary.
+-- If direct client PostgREST access is ever enabled, these policies enforce auth.uid() matching.
 
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE api_providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
@@ -21,6 +24,10 @@ CREATE POLICY "Users can view own profile" ON profiles
     FOR SELECT USING (auth.uid()::text = id);
 CREATE POLICY "Users can update own profile" ON profiles
     FOR UPDATE USING (auth.uid()::text = id);
+
+-- Password Reset Tokens: internal server only
+CREATE POLICY "Users access own reset tokens" ON password_reset_tokens
+    FOR ALL USING (auth.uid()::text = user_id);
 
 -- API Providers: strict user isolation
 CREATE POLICY "Users access own api_providers" ON api_providers

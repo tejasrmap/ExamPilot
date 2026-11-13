@@ -1,17 +1,24 @@
 import os
+import logging
+from backend.app.core.config import settings
 from backend.app.db.session import engine, Base
 from backend.app.db.models import (
-    Profile, APIProvider, Subject, Question, PracticeSession,
-    PracticeAnswer, Document, DocumentChunk, Conversation, Message,
-    UsageLog, UserSetting
+    Profile, PasswordResetToken, APIProvider, Subject, Question,
+    PracticeSession, PracticeAnswer, Document, DocumentChunk,
+    Conversation, Message, UsageLog, UserSetting
 )
+
+logger = logging.getLogger("exampilot.db")
 
 SUPABASE_RLS_SQL = """
 -- ExamPilot 2.0 Row Level Security (RLS) Policies for Supabase PostgreSQL
 -- Enforces strict user tenant isolation across all tables
+-- Architecture Note: FastAPI backend acts as trusted authorization boundary.
+-- If direct client PostgREST access is ever enabled, these policies enforce auth.uid() matching.
 
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE api_providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
@@ -29,6 +36,10 @@ CREATE POLICY "Users can view own profile" ON profiles
     FOR SELECT USING (auth.uid()::text = id);
 CREATE POLICY "Users can update own profile" ON profiles
     FOR UPDATE USING (auth.uid()::text = id);
+
+-- Password Reset Tokens: internal server only
+CREATE POLICY "Users access own reset tokens" ON password_reset_tokens
+    FOR ALL USING (auth.uid()::text = user_id);
 
 -- API Providers: strict user isolation
 CREATE POLICY "Users access own api_providers" ON api_providers
@@ -86,24 +97,53 @@ CREATE POLICY "Users access own settings" ON user_settings
 """
 
 def init_db():
+    env = getattr(settings, "ENVIRONMENT", "development").lower()
+    if env in ("production", "prod"):
+        logger.info("Production environment detected. Skipping automatic runtime DDL mutations. Relying on Alembic migrations.")
+        return
+
     Base.metadata.create_all(bind=engine)
-    # Check if structured_options_json exists in questions table; if not, add it safely
     from sqlalchemy import inspect, text
     inspector = inspect(engine)
-    if "questions" in inspector.get_table_names():
-        columns = [c["name"] for c in inspector.get_columns("questions")]
-        if "structured_options_json" not in columns:
-            with engine.connect() as conn:
+    tables = inspector.get_table_names()
+
+    with engine.connect() as conn:
+        # Check structured_options_json on questions
+        if "questions" in tables:
+            q_cols = [c["name"] for c in inspector.get_columns("questions")]
+            if "structured_options_json" not in q_cols:
                 conn.execute(text("ALTER TABLE questions ADD COLUMN structured_options_json TEXT"))
                 conn.commit()
-    # Save the Supabase RLS SQL migration file
+
+        # Check token_version on profiles
+        if "profiles" in tables:
+            p_cols = [c["name"] for c in inspector.get_columns("profiles")]
+            if "token_version" not in p_cols:
+                conn.execute(text("ALTER TABLE profiles ADD COLUMN token_version INTEGER DEFAULT 1 NOT NULL"))
+                conn.commit()
+
+        # Check question_ids_json on practice_sessions
+        if "practice_sessions" in tables:
+            ps_cols = [c["name"] for c in inspector.get_columns("practice_sessions")]
+            if "question_ids_json" not in ps_cols:
+                conn.execute(text("ALTER TABLE practice_sessions ADD COLUMN question_ids_json TEXT"))
+                conn.commit()
+
+        # Check storage columns on documents
+        if "documents" in tables:
+            d_cols = [c["name"] for c in inspector.get_columns("documents")]
+            if "storage_provider" not in d_cols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN storage_provider VARCHAR(30) DEFAULT 'local' NOT NULL"))
+                conn.commit()
+            if "storage_key" not in d_cols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN storage_key VARCHAR(500)"))
+                conn.commit()
+
     os.makedirs("backend/migrations", exist_ok=True)
     with open("backend/migrations/001_supabase_rls.sql", "w", encoding="utf-8") as f:
         f.write(SUPABASE_RLS_SQL)
-    with open("backend/migrations/002_add_structured_options_json.sql", "w", encoding="utf-8") as f:
-        f.write("ALTER TABLE questions ADD COLUMN IF NOT EXISTS structured_options_json TEXT;\n")
+
     print("Database tables initialized successfully and RLS migration generated.")
 
 if __name__ == "__main__":
     init_db()
-

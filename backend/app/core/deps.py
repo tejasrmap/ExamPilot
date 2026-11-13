@@ -14,6 +14,7 @@ def get_current_user(
 ) -> Profile:
     """
     Validates bearer token and resolves the server-authenticated Profile.
+    Checks token version (tv) to ensure sessions invalidated by password reset are rejected.
     If no token is supplied or invalid, returns 401 Unauthorized.
     """
     if not credentials:
@@ -46,6 +47,15 @@ def get_current_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User account not found",
         )
+
+    # Session revocation check: verify token version matches profile version
+    token_version = payload.get("tv")
+    if token_version is not None and token_version != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has been invalidated. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     return user
 
@@ -53,10 +63,10 @@ def get_optional_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
     db: Session = Depends(get_db)
 ) -> Optional[Profile]:
+    """Resolves authenticated profile if valid token is provided, else returns None."""
     if not credentials:
         return None
     try:
-        return get_current_user(credentials, db)
+        return get_current_user(credentials=credentials, db=db)
     except HTTPException:
         return None
-

@@ -1,142 +1,139 @@
-# ExamPilot — Offline-First AI MCQ Learning Assistant
+# ExamPilot 2.0 — AI-Powered Online Learning & MCQ Practice Platform
 <p align="center">
-  <img src="assets/icons/icon_128x128.png" width="96" height="96" alt="ExamPilot Logo">
+  <img src="assets/icons/icon_128x128.png" width="96" height="96" alt="ExamPilot 2.0 Logo">
   <br>
   <strong>Understand Questions. Learn the Answers.</strong>
   <br>
-  <em>Developed and Distributed by GT InnoX LLP</em>
+  <em>Developed by GT InnoX LLP</em>
 </p>
 
 ---
 
 ## Overview
 
-**ExamPilot** is a commercial-grade, offline-first AI learning assistant engineered specifically for multiple-choice question (MCQ) mastery.
+**ExamPilot 2.0** is a full-featured, production-oriented online SaaS platform for multiple-choice question (MCQ) mastery and intelligent academic revision. 
 
-Rather than acting as a simple "answer solver", ExamPilot functions as a pedagogical study partner: it captures permitted practice questions directly from your screen or browser, runs optical character recognition (OCR), extracts options, analyzes why the correct choice is valid, and provides an option-by-option educational breakdown of why remaining alternatives are incorrect or suboptimal.
-
-**Privacy & Local-First Commitment**:
-- **Zero Cloud API Subscriptions**: Does NOT require OpenAI, ChatGPT, Gemini, or any paid cloud service.
-- **100% Local Inference**: Runs state-of-the-art open-source LLMs (Qwen 2.5 7B / 1.5B) locally via Ollama.
-- **Zero Telemetry**: All screenshots and practice histories remain strictly on your device in local SQLite storage.
-- **Academic Integrity**: Operates strictly in formative self-study environments where AI assistance is explicitly authorized. Never circumvents proctoring or auto-submits tests.
+Rather than functioning as a simplistic answer lookup tool, ExamPilot is a pedagogical learning partner: students capture, upload, extract, and dissect practice questions using high-accuracy OCR and curriculum-grounded AI providers. The platform delivers step-by-step reasoning, comprehensive option-by-option breakdowns, ambiguity detection, practice test sessions, and intelligent RAG-assisted knowledge library search.
 
 ---
 
-## Key Features
-
-1. **Windows Desktop Application (PySide6)**:
-   - High-contrast dark theme (`#0B1020`, `#111827`, `#6366F1`, `#06B6D4`).
-   - Interactive multi-monitor screen capture (`Ctrl + Shift + Q`).
-   - RapidOCR text extraction with image contrast enhancement and mathematical symbol support.
-   - Editable options preview allowing student verification before inference.
-   - Comprehensive Learning Analytics, Subject Filtering, and Practice History.
-   - Draggable & resizable **Floating Learning Panel** with always-on-top mode.
-   - Built-in **AI Model Manager** with hardware-tailored model downloads (8 GB, 16 GB, 32 GB RAM).
-
-2. **Google Chrome Extension (Manifest V3)**:
-   - Native Messaging communication bridge to desktop application.
-   - One-click extraction of highlighted MCQs on permitted practice pages.
-   - Manual entry mode and instant answer review within the toolbar popup.
-
-3. **Rigorous Heuristic Confidence Engine**:
-   - Calibrates confidence scores using linguistic analysis (hedge word detection, option distinctiveness) to avoid misleading uncalibrated probabilities.
-
-4. **100+ Verified Benchmark Evaluation Corpus**:
-   - Tested and measured across 104 questions in Computer Science, Math, Data Science, Physics, Chemistry, Business, and Networking.
-   - Measured parser accuracy: **100%**.
-   - Measured OCR detection confidence: **95.6%**.
-
----
-
-## Technical Architecture
+## Platform Architecture
 
 ```
-ExamPilot/
-├── desktop/               # Windows PySide6 Desktop Application
-│   ├── main.py            # Desktop launcher
-│   ├── app.py             # Qt application lifecycle & theming
-│   ├── config.py          # Color schemes, paths, model catalog
-│   ├── core/              # Capture (MSS), OCR (RapidOCR), Question Parser, Answer Engine
-│   ├── ai/                # Ollama client, response parser, prompt engineering
-│   ├── database/          # SQLite schema, migrations, repository, backups
-│   ├── ui/                # Dashboard, Practice Assistant, History, Analytics, Floating Panel
-│   ├── communication/     # Chrome Native Messaging Host & IPC
-│   ├── security/          # Privacy guard and input validation
-│   └── utils/             # System hardware advisor, sanitized logger
-├── chrome-extension/      # Chrome Manifest V3 Extension & Native Messaging Host
-├── assets/                # Logos, SVG master branding, icons (16px to 512px)
-├── tests/                 # Full automated test suite & 100+ MCQ benchmark runner
-├── scripts/               # Windows installer, uninstaller, setup_ollama, build scripts
-└── docs/                  # Installation, User Guide, Architecture, Privacy, Evaluation
+ExamPilot 2.0/
+├── frontend/             # Next.js 14 App Router (Tailwind CSS, TypeScript)
+│   ├── app/              # Web pages: Scanner, History, Practice, Library, PDF, Assistant, Analytics, Settings
+│   ├── components/       # Shared UI components (Navbar, Sidebar)
+│   ├── lib/              # API client, Option Identity engine, utilities
+│   └── tests/            # Native Node.js unit tests (node --test)
+├── backend/              # FastAPI Async REST Backend & Microservices
+│   ├── alembic/          # Versioned, repeatable database migrations
+│   ├── app/              # API routes, auth, core security, DB models, AI providers, OCR, RAG
+│   │   ├── api/routes/   # Auth, Questions, Practice, OCR, Documents, Providers, Assistant, Analytics, Settings
+│   │   ├── core/         # Config, dependencies, rate limiting, AES-256-GCM encryption, JWT
+│   │   ├── db/           # SQLAlchemy models, session pooling, initialization
+│   │   ├── providers/    # BYOK AI Engine: OpenAI, Gemini, Anthropic, OpenRouter with retry & cost tracking
+│   │   └── services/     # RapidOCR engine, QuestionParser, domain detector, RAG, storage, email
+│   └── migrations/       # Supabase RLS and raw SQL migrations
+├── chrome-extension/     # Google Chrome Manifest V3 Companion Extension (REST API)
+├── tests/                # Automated pytest regression & security suites (103 tests)
+└── docs/                 # Production deployment, architecture, and security reports
 ```
 
 ---
 
-## Quick Start Guide
+## Key SaaS Capabilities
 
-### 1. Automated Installation
-Run the installer script:
-```bat
-scripts\install.bat
-```
-This installs dependencies, generates branding icons, registers the Chrome native host, and creates a desktop shortcut.
+1. **Modern Responsive Web Application (Next.js 14)**:
+   - Complete learning dashboard, screen capture scanner, PDF exam extractor, practice test generator, RAG library, and interactive AI tutor chat.
+   - Pre-rendered as static content (`○`) with sub-100kB first-load JS bundles.
 
-### 2. Configure Local AI (Ollama)
-Run the Ollama setup wizard:
-```bat
-scripts\setup_ollama.bat
-```
-Or start Ollama manually and pull your preferred model:
+2. **Multi-Provider BYOK AI Engine**:
+   - Secure Bring-Your-Own-Key integration for **OpenAI**, **Google Gemini**, **Anthropic Claude**, and **OpenRouter**.
+   - Server-side **AES-256-GCM** authenticated encryption with zero-downtime key rotation support.
+   - Transparent token usage and estimated API cost tracking per user.
+   - Transient failure handling with exponential backoff retries (429, 502, 503, 504).
+
+3. **High-Accuracy OCR & Question Parser**:
+   - RapidOCR (PaddleOCR ONNX) deep learning text detection and spatial line sorting.
+   - Stable option identity preservation: handles unlettered radio buttons, multi-line fill-in-the-blank questions, auxiliary endings, variable option counts (2–6), assembly code instructions, and never invents artificial option letters.
+
+4. **Multi-Tenant Security & Isolation**:
+   - Backend acts as a trusted authorization boundary with strict user ownership enforcement on all routes.
+   - Complete password reset lifecycle with SHA-256 token hashing, 15-minute expiration, atomic consumption, user enumeration defense, and session invalidation via `token_version`.
+   - Practice tests enforce session question membership, prevent duplicate answers, and strictly isolate user quiz pools.
+   - Bounded streaming file uploads (25MB limit) with magic byte inspection (PNG, JPEG, WebP, PDF).
+   - Pluggable durable storage abstraction supporting local and Supabase Storage private buckets.
+
+5. **Chrome Manifest V3 Companion Extension**:
+   - Captures visible screen areas via `chrome.tabs.captureVisibleTab` and connects directly to the SaaS REST API.
+   - Clean Manifest V3 architecture with zero bundled private signing keys or obsolete native messaging dependencies.
+
+---
+
+## Quick Start (Development)
+
+### 1. Prerequisites
+- Python 3.10+
+- Node.js 18+ or 20 LTS
+
+### 2. Install Backend Dependencies
 ```bash
-# Recommended for 16 GB RAM machines:
-ollama pull qwen2.5:7b-instruct
-
-# Lightweight for 8 GB RAM machines:
-ollama pull qwen2.5:1.5b
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
-### 3. Launch ExamPilot
-```bat
-python desktop\main.py
-```
-Or double-click the **ExamPilot** desktop shortcut.
-
-### 4. Load Chrome Extension
-1. Open Chrome and navigate to `chrome://extensions/`.
-2. Enable **Developer mode**.
-3. Click **Load unpacked** and select `ExamPilot\chrome-extension`.
-
----
-
-## Benchmark Evaluation Results
-
-| Metric | Measured Score | Standard |
-|--------|----------------|----------|
-| **MCQ Question Parser Accuracy** | **100.0%** | 104/104 benchmark MCQs |
-| **Option Segmentation Fidelity** | **100.0%** | 416/416 options extracted |
-| **OCR Image Detection Rate** | **100.0%** | Visual crop test suite |
-| **Average OCR Token Confidence** | **95.6%** | RapidOCR PaddleOCR weights |
-
-Full evaluation report available at [docs/EVALUATION_REPORT.md](docs/EVALUATION_REPORT.md).
-
----
-
-## Automated Test Suite
-
-Run all unit, integration, and communication tests:
+### 3. Run Database Migrations
 ```bash
-python -m pytest tests/
+python -m alembic upgrade head
 ```
-All 21 test suites pass with 100% verification.
+
+### 4. Install Frontend Dependencies
+```bash
+npm --prefix frontend install
+```
+
+### 5. Launch Development Services
+Run both FastAPI (port 8000) and Next.js (port 3000) simultaneously:
+```bash
+python scripts/run_saas.py
+```
+- Web Application: http://localhost:3000
+- Backend Interactive API Docs: http://127.0.0.1:8000/api/docs
 
 ---
 
-## Commercial Ownership & Licensing
+## Testing & Quality Verification
 
-- **Product**: ExamPilot™
-- **Company**: GT InnoX LLP
-- **Tagline**: Understand Questions. Learn the Answers.
-- **Copyright**: © 2026 GT InnoX LLP. All rights reserved.
-- See [LICENSE](LICENSE) and [docs/COMMERCIAL_READINESS.md](docs/COMMERCIAL_READINESS.md).
+Run the full automated test suite:
 
+```bash
+# 1. Full Python Backend & Regression Test Suite (103 tests)
+python -m pytest -s tests/
+
+# 2. Frontend Option Identity Unit Tests (6 tests)
+npm --prefix frontend test
+
+# 3. Next.js Production Build Verification (13 static routes)
+npm --prefix frontend run build
+```
+
+---
+
+## Production Security & Deployment Documentation
+
+- [PRODUCTION_READINESS_MASTER_AUDIT.md](PRODUCTION_READINESS_MASTER_AUDIT.md) — Comprehensive readiness audit & component assessment.
+- [SECURITY_REMEDIATION_REPORT.md](SECURITY_REMEDIATION_REPORT.md) — Full security remediation register and CVSS fixes.
+- [TENANT_ISOLATION_TEST_REPORT.md](TENANT_ISOLATION_TEST_REPORT.md) — Multi-user tenant isolation test evidence.
+- [PASSWORD_RESET_SECURITY_REPORT.md](PASSWORD_RESET_SECURITY_REPORT.md) — Secure password reset architecture.
+- [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) — Production deployment checklist for Vercel, Render/Railway, and Supabase.
+- [PRODUCTION_CONFIGURATION_GUIDE.md](PRODUCTION_CONFIGURATION_GUIDE.md) — Environment variables and zero-downtime key rotation guide.
+- [STORAGE_MIGRATION_GUIDE.md](STORAGE_MIGRATION_GUIDE.md) — Supabase Storage private bucket configuration.
+
+---
+
+## License & Copyright
+
+© 2026 GT InnoX LLP. All rights reserved.  
+Distributed under commercial and enterprise licensing agreements.

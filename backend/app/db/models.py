@@ -17,6 +17,7 @@ class Profile(Base):
     hashed_password = Column(String(255), nullable=True)
     display_name = Column(String(100), nullable=True)
     avatar_url = Column(String(500), nullable=True)
+    token_version = Column(Integer, default=1, nullable=False) # For session invalidation upon password reset
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -29,6 +30,20 @@ class Profile(Base):
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
     usage_logs = relationship("UsageLog", back_populates="user", cascade="all, delete-orphan")
     settings = relationship("UserSetting", back_populates="user", cascade="all, delete-orphan")
+    password_reset_tokens = relationship("PasswordResetToken", back_populates="user", cascade="all, delete-orphan")
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, index=True) # SHA-256 hash of single-use token
+    expires_at = Column(DateTime, nullable=False, index=True)
+    used_at = Column(DateTime, nullable=True) # Set upon successful consumption
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("Profile", back_populates="password_reset_tokens")
 
 
 class APIProvider(Base):
@@ -98,6 +113,7 @@ class PracticeSession(Base):
     correct_answers = Column(Integer, default=0)
     score_percentage = Column(Float, default=0.0)
     time_limit_minutes = Column(Integer, nullable=True)
+    question_ids_json = Column(Text, nullable=True) # JSON array of authorized question IDs in session
     started_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
 
@@ -125,6 +141,8 @@ class Document(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     user_id = Column(String(36), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     filename = Column(String(255), nullable=False)
+    storage_provider = Column(String(30), default="local", nullable=False) # local, supabase, s3
+    storage_key = Column(String(500), nullable=True) # User-scoped object key in bucket
     storage_path = Column(String(500), nullable=False)
     file_size_bytes = Column(Integer, default=0)
     subject_id = Column(String(36), ForeignKey("subjects.id", ondelete="SET NULL"), nullable=True)
@@ -201,4 +219,3 @@ class UserSetting(Base):
     setting_value = Column(Text, nullable=False)
 
     user = relationship("Profile", back_populates="settings")
-

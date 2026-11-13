@@ -102,10 +102,16 @@ def test_password_reset_flow():
         client.post("/api/auth/login", json={"email": email, "password": old_pwd})
 
     # 1. Request forgot password
+    from backend.app.services.email import email_service
     forgot_res = client.post("/api/auth/forgot-password", json={"email": email})
     assert forgot_res.status_code == 200
-    token = forgot_res.json().get("reset_token")
-    assert token is not None, "Reset token must be issued for registered user"
+    # Security requirement: reset_token must NEVER be returned in API response
+    assert "reset_token" not in forgot_res.json(), "Security breach: reset token leaked in response body!"
+    assert forgot_res.json()["message"] == "If this email address is registered, password reset instructions have been sent."
+
+    # Retrieve dispatched single-use token from email service
+    token = email_service.get_last_reset_token(email)
+    assert token is not None, "Reset token must be dispatched via email service"
 
     # 2. Reset password with valid token
     reset_res = client.post("/api/auth/reset-password", json={
@@ -150,7 +156,9 @@ def test_unauthorized_endpoints():
         ("GET", "/api/analytics/overview"),
         ("GET", "/api/practice"),
         ("GET", "/api/documents"),
-        ("GET", "/api/settings")
+        ("GET", "/api/settings"),
+        ("POST", "/api/ocr/image"),
+        ("POST", "/api/ocr/pdf")
     ]
 
     for method, path in protected_paths:
