@@ -54,3 +54,4 @@ This report validates multi-tenant data isolation across ExamPilot 2.0. Followin
 | `test_practice_test_cross_tenant_isolation` | Practice test question generation | **PASSED** | 0 cross-tenant question exposure |
 | `test_practice_test_duplicate_answers_and_resubmission_rejection` | Answer submission & integrity | **PASSED** | Membership & resubmission guards enforced |
 | `test_cross_account_isolation_and_penetration` | Providers, assistant chat, history | **PASSED** | 100% tenant isolation across resources |
+

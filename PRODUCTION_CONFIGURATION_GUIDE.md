@@ -75,3 +75,4 @@ NEXT_PUBLIC_SUPABASE_URL=https://[YOUR-PROJECT-REF].supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 ```
 *(Never include backend service role keys or encryption secrets in the frontend bundle).*
+

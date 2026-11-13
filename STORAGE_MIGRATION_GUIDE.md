@@ -89,3 +89,4 @@ For teams migrating pre-existing local documents to Supabase Storage:
 - **Private Buckets Only:** Documents are never exposed to public internet URLs.
 - **User Tenant Isolation:** Objects are saved under `documents/{user_id}/{document_id}.pdf`.
 - **Atomic Deletion:** Deleting a document via `/api/documents/{id}` automatically purges both the database chunks and the remote storage object.
+

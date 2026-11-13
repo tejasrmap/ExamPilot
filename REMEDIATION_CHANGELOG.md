@@ -83,3 +83,4 @@
 - `tests/test_security_audit.py` & `tests/test_backend_ocr_parser.py`:
   - Updated to pass authentication and verify new secure token lifecycle.
 - Full suite: **103 passed in 30.18s**.
+
