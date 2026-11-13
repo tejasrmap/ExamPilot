@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Any
 from backend.app.providers.base import BaseAIProvider, ModelInfo, QuestionAnalysisResult, ConfidenceModel
 from backend.app.providers.models_catalog import CATALOG, calculate_cost
 from backend.app.providers.prompt_builder import ANALYSIS_SYSTEM_PROMPT, build_analysis_user_prompt
+from backend.app.providers.http_utils import execute_provider_request_with_retry
 
 class AnthropicProvider(BaseAIProvider):
     @property
@@ -25,10 +26,10 @@ class AnthropicProvider(BaseAIProvider):
                 "max_tokens": 1,
                 "messages": [{"role": "user", "content": "ping"}]
             }
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
-                # 200 is success; 401 is bad key; 400 with invalid model is acceptable key
-                return resp.status_code in (200, 400) and resp.status_code != 401
+            resp = await execute_provider_request_with_retry(
+                "POST", "https://api.anthropic.com/v1/messages", headers=headers, json_data=payload, timeout=10.0, max_retries=1
+            )
+            return resp.status_code in (200, 400) and resp.status_code != 401
         except Exception:
             return False
 
@@ -60,49 +61,50 @@ class AnthropicProvider(BaseAIProvider):
             "temperature": 0.1
         }
 
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            resp = await client.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
-            if resp.status_code != 200:
-                raise RuntimeError(f"Anthropic API error ({resp.status_code}): {resp.text}")
-            
-            data = resp.json()
-            raw_text = data["content"][0]["text"].strip()
-            
-            # Clean possible markdown wrap
-            if raw_text.startswith("```json"):
-                raw_text = raw_text[7:]
-            if raw_text.startswith("```"):
-                raw_text = raw_text[3:]
-            if raw_text.endswith("```"):
-                raw_text = raw_text[:-3]
-            raw_text = raw_text.strip()
+        resp = await execute_provider_request_with_retry(
+            "POST", "https://api.anthropic.com/v1/messages", headers=headers, json_data=payload, timeout=45.0, max_retries=2
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Anthropic API error ({resp.status_code}): {resp.text}")
+        
+        data = resp.json()
+        raw_text = data["content"][0]["text"].strip()
+        
+        # Clean possible markdown wrap
+        if raw_text.startswith("```json"):
+            raw_text = raw_text[7:]
+        if raw_text.startswith("```"):
+            raw_text = raw_text[3:]
+        if raw_text.endswith("```"):
+            raw_text = raw_text[:-3]
+        raw_text = raw_text.strip()
 
-            usage = data.get("usage", {})
-            in_tokens = usage.get("input_tokens", 0)
-            out_tokens = usage.get("output_tokens", 0)
-            cost = calculate_cost("anthropic", model, in_tokens, out_tokens)
+        usage = data.get("usage", {})
+        in_tokens = usage.get("input_tokens", 0)
+        out_tokens = usage.get("output_tokens", 0)
+        cost = calculate_cost("anthropic", model, in_tokens, out_tokens)
 
-            parsed = json.loads(raw_text)
-            conf = parsed.get("confidence", {})
-            if isinstance(conf, str):
-                conf = {"level": "high", "reason": conf}
+        parsed = json.loads(raw_text)
+        conf = parsed.get("confidence", {})
+        if isinstance(conf, str):
+            conf = {"level": "high", "reason": conf}
 
-            return QuestionAnalysisResult(
-                question=parsed.get("question", question_text),
-                suggested_answer=parsed.get("suggested_answer", "A").upper(),
-                answer_text=parsed.get("answer_text", options.get(parsed.get("suggested_answer", "A"), "")),
-                explanation=parsed.get("explanation", ""),
-                option_analysis=parsed.get("option_analysis", {}),
-                confidence=ConfidenceModel(
-                    level=conf.get("level", "high"),
-                    reason=conf.get("reason", "Theoretical and conceptual consistency")
-                ),
-                subject=parsed.get("subject", subject or "General"),
-                needs_review=parsed.get("needs_review", False),
-                input_tokens=in_tokens,
-                output_tokens=out_tokens,
-                estimated_cost=cost
-            )
+        return QuestionAnalysisResult(
+            question=parsed.get("question", question_text),
+            suggested_answer=parsed.get("suggested_answer", "A").upper(),
+            answer_text=parsed.get("answer_text", options.get(parsed.get("suggested_answer", "A"), "")),
+            explanation=parsed.get("explanation", ""),
+            option_analysis=parsed.get("option_analysis", {}),
+            confidence=ConfidenceModel(
+                level=conf.get("level", "high"),
+                reason=conf.get("reason", "Theoretical and conceptual consistency")
+            ),
+            subject=parsed.get("subject", subject or "General"),
+            needs_review=parsed.get("needs_review", False),
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
+            estimated_cost=cost
+        )
 
     async def chat(
         self,
@@ -125,20 +127,20 @@ class AnthropicProvider(BaseAIProvider):
         if system_prompt:
             payload["system"] = system_prompt
 
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            resp = await client.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
-            if resp.status_code != 200:
-                raise RuntimeError(f"Anthropic API error ({resp.status_code}): {resp.text}")
-            data = resp.json()
-            usage = data.get("usage", {})
-            in_tokens = usage.get("input_tokens", 0)
-            out_tokens = usage.get("output_tokens", 0)
-            cost = calculate_cost("anthropic", model, in_tokens, out_tokens)
+        resp = await execute_provider_request_with_retry(
+            "POST", "https://api.anthropic.com/v1/messages", headers=headers, json_data=payload, timeout=45.0, max_retries=2
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Anthropic API error ({resp.status_code}): {resp.text}")
+        data = resp.json()
+        usage = data.get("usage", {})
+        in_tokens = usage.get("input_tokens", 0)
+        out_tokens = usage.get("output_tokens", 0)
+        cost = calculate_cost("anthropic", model, in_tokens, out_tokens)
 
-            return {
-                "content": data["content"][0]["text"],
-                "input_tokens": in_tokens,
-                "output_tokens": out_tokens,
-                "estimated_cost": cost
-            }
-
+        return {
+            "content": data["content"][0]["text"],
+            "input_tokens": in_tokens,
+            "output_tokens": out_tokens,
+            "estimated_cost": cost
+        }

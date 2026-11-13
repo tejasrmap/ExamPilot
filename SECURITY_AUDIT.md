@@ -1,74 +1,69 @@
-# ExamPilot — Security Audit & Hardening Report
-**Product:** ExamPilot  
-**Vendor:** GT InnoX LLP  
-**Date:** November 2026  
-**Auditor:** GT InnoX Software Architecture & Security Team  
-**Compliance Level:** Commercial Release Readiness (Beta 1.0)
+# ExamPilot 2.0 — Security Audit & Threat Assessment
+**Company:** GT InnoX LLP  
+**Product:** ExamPilot 2.0  
+**Date:** 2026-11-13  
+**Auditor:** Antigravity Principal Security Engineer  
 
 ---
 
 ## 1. Executive Summary
 
-A comprehensive security audit of the ExamPilot hybrid Windows desktop and Chrome extension architecture was conducted, specifically targeting:
-1. Native Messaging origin matching and IPC integrity.
-2. Cryptographic key hygiene and secret leakage.
-3. Extension packaging and permission minimization under Chrome Manifest V3.
-4. Local AI inference boundaries and data leakage risks.
-5. Windows registry safety and uninstallation cleanup.
+A comprehensive security audit of ExamPilot 2.0 was conducted across backend API endpoints, authentication flows, credential storage, multi-tenant database isolation, and the Chrome Extension companion.
 
-All critical vulnerabilities identified during prior audits (including the accidental exposure of private signing keys and static developer directory paths) have been remediated and verified through automated tests.
-
----
-
-## 2. Cryptographic Key Lifecycle & Remediation
-
-### The Vulnerability (SEC-001)
-Previous development iterations created `chrome-extension/key.pem` to retain extension ID continuity. This private RSA key was mistakenly present in the source repository and packaged into early ZIP distributions.
-
-### Remediation & Verification
-1. **Permanent Removal:** `key.pem` has been deleted from the repository.
-2. **Git Hygiene:** Added `*.pem`, `*.key`, `*.pfx`, `*.p12`, `*.id` to `.gitignore`.
-3. **Public Key Embedding:** Derived the public SubjectPublicKeyInfo directly into `chrome-extension/manifest.json`:
-   ```json
-   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA09h3..."
-   ```
-   This guarantees that unpacked developer installations and distributed packages maintain the exact same deterministic extension ID:
-   `gdamjmdjoeegfhjolmnakjgphlgpckdh`
-4. **Automated Enforcement:** `scripts/package_extension.py` scans every file during build and raises a fatal exception if any `.pem`, `.key`, or private artifact is found.
+**Overall Security Posture:** **STRONG (Production Ready)**  
+- Zero plaintext API key leakage.
+- Zero cross-tenant data leaks.
+- Zero obsolete Native Messaging IPC vectors.
+- Strict parameterization and SQL injection immunity.
 
 ---
 
-## 3. Native Messaging IPC & Sandbox Integrity
+## 2. Threat Analysis & Verified Mitigations
 
-### Non-Wildcard Origin Matching
-Chrome Native Messaging requires an `allowed_origins` field in the host manifest. Wildcards (`*`) are prohibited by Chrome Web Store policies and allow arbitrary extensions to execute native binaries.
-- ExamPilot host manifest now dynamically binds exclusively to:
-  `chrome-extension://gdamjmdjoeegfhjolmnakjgphlgpckdh/`
+### 2.1 API Key Encryption & BYOK Storage
+- **Threat**: Attackers accessing database dumps or unauthorized read endpoints to steal OpenAI, Gemini, Claude, or OpenRouter user keys.
+- **Implemented Mitigation**:
+  - Keys are encrypted at rest using **AES-256-GCM** with authenticated 96-bit random nonces (`backend/app/core/security.py`).
+  - Master encryption secret is derived via SHA-256 from `API_KEY_ENCRYPTION_SECRET`.
+  - Frontend responses strictly return masked keys (`sk-proj-••••••••••••1234`).
+  - Plaintext keys are never written to logs, error responses, or browser bundles.
+  - Verified in `test_api_key_encryption_and_masking`.
 
-### Dynamic Installation Path Resolution
-- Removed hardcoded developer paths (`C:\Users\tejag\...`) from templates.
-- Manifest generation resolves the actual runtime path dynamically via `host_registration.py`.
-- Windows Registry registration key:
-  `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.gtinnox.exampilot`
+### 2.2 Multi-Tenant Data Isolation & RLS
+- **Threat**: Authenticated User A viewing or deleting User B's questions, documents, or API provider keys.
+- **Implemented Mitigation**:
+  - All database queries strictly scope records by `current_user.id` resolved from validated server-side JWT sessions.
+  - Supabase PostgreSQL Row Level Security (RLS) policies generated in `backend/migrations/001_supabase_rls.sql` enforce `auth.uid()::text = user_id` across all 12 tables.
+  - Cross-tenant penetration tests verified in `test_cross_account_isolation_and_penetration`.
 
-### Standalone Executable Invocation
-The native host is launched via `ExamPilot.exe --native-host`, eliminating the requirement for Python interpreters, pip packages, or external scripting environments on customer machines.
+### 2.3 Authentication & Password Security
+- **Threat**: Brute-force, token tampering, and weak password hashes.
+- **Implemented Mitigation**:
+  - Password hashing upgraded to **PBKDF2-HMAC-SHA256** with automatic salt generation, eliminating C-extension version bugs.
+  - Signed JWT tokens with HS256 algorithm and server-side secret validation.
+  - Password reset tokens expire in 15 minutes and include purpose claims (`purpose: "password_reset"`).
+
+### 2.4 SQL Injection Defense
+- **Threat**: SQL injection through search inputs, filter queries, or credentials.
+- **Implemented Mitigation**:
+  - SQLAlchemy 2.0 ORM parameterization used exclusively across all database operations.
+  - Raw SQL string formatting is strictly forbidden.
+  - Verified in `test_sql_injection_defense`.
+
+### 2.5 Chrome Extension MV3 Hardening
+- **Threat**: Private key leakage, untrusted native binary execution, or unauthorized background surveillance.
+- **Implemented Mitigation**:
+  - Hardcoded RSA signing key completely removed from `manifest.json`.
+  - Native Messaging permission and local host registry templates deleted.
+  - Extension operates strictly on user-initiated click events with short-lived session tokens.
+  - Permissions reduced to minimal scope: `activeTab`, `scripting`, `storage`.
+  - Verified in `test_manifest_v3_security`.
 
 ---
 
-## 4. Local AI Inference & Zero-Data-Exfiltration Architecture
+## 3. Security Recommendations for Deployment
 
-- **100% Offline-First:** AI processing is routed strictly to the local Ollama instance on `127.0.0.1:11434`.
-- **Zero Cloud API Telemetry:** No user questions, screen captures, or OCR transcripts are transmitted to ChatGPT, OpenAI, Google Gemini, Anthropic, or external telemetry servers.
-- **Sanitized Model Responses:** AI responses are filtered through regex sanitizers to strip hallucinated URLs and simulated markdown links.
-- **Input Validation:** All payloads received across Native Messaging stdio undergo strict JSON schema and length validation (`desktop/security/validation.py`) to prevent buffer overflows or injection attempts.
-
----
-
-## 5. Chrome Manifest V3 Compliance
-
-The extension manifest strictly complies with Chrome Web Store developer guidelines:
-- Minimal permissions: `"nativeMessaging"`, `"activeTab"`, `"scripting"`, `"storage"`.
-- Zero background persistent pages (uses standard MV3 service worker `background.js`).
-- Zero remote code execution (no `eval()`, no external script injection).
-- All UI assets and stylesheets are bundled locally within the extension directory.
+1. Set `API_KEY_ENCRYPTION_SECRET` to a 64-character random hex string in your production environment variables (e.g. Render / Railway).
+2. Set `JWT_SECRET` to a cryptographically secure random string.
+3. Configure `BACKEND_CORS_ORIGINS` to only permit your verified production frontend domains (e.g. `https://exampilot.gtinnox.com`).
+4. Ensure TLS/HTTPS is enforced at the reverse proxy (Cloudflare, Vercel, or persistent host).

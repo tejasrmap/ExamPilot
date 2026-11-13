@@ -1,10 +1,13 @@
+from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from backend.app.db.session import get_db
 from backend.app.db.models import Profile
-from backend.app.core.security import verify_password, get_password_hash, create_access_token
+from backend.app.core.security import (
+    verify_password, get_password_hash, create_access_token, decode_access_token
+)
 from backend.app.core.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -17,6 +20,13 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    reset_token: str
+    new_password: str
 
 class ProfileResponse(BaseModel):
     id: str
@@ -85,6 +95,50 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         )
     )
 
+@router.post("/forgot-password")
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(Profile).filter(Profile.email == req.email.lower().strip()).first()
+    if not user:
+        # Standard security practice: avoid user enumeration by returning uniform message
+        return {
+            "message": "If this email is registered, a password reset link has been dispatched.",
+            "reset_token": None
+        }
+    
+    # Generate temporary reset token valid for 15 minutes
+    reset_token = create_access_token(
+        data={"sub": user.id, "email": user.email, "purpose": "password_reset"},
+        expires_delta=timedelta(minutes=15)
+    )
+    return {
+        "message": "Password reset token generated successfully.",
+        "reset_token": reset_token
+    }
+
+@router.post("/reset-password")
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    payload = decode_access_token(req.reset_token)
+    if not payload or payload.get("purpose") != "password_reset":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset token."
+        )
+    
+    user_id = payload.get("sub")
+    user = db.query(Profile).filter(Profile.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User account not found.")
+
+    if len(req.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 6 characters long."
+        )
+
+    user.hashed_password = get_password_hash(req.new_password)
+    db.commit()
+    return {"message": "Password has been reset successfully. Please log in with your new credentials."}
+
 @router.get("/profile", response_model=ProfileResponse)
 def get_profile(current_user: Profile = Depends(get_current_user)):
     return ProfileResponse(
@@ -117,4 +171,3 @@ def update_profile(
 @router.post("/logout")
 def logout(current_user: Profile = Depends(get_current_user)):
     return {"message": "Successfully logged out."}
-

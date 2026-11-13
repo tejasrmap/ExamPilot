@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Any
 from backend.app.providers.base import BaseAIProvider, ModelInfo, QuestionAnalysisResult, ConfidenceModel
 from backend.app.providers.models_catalog import CATALOG, calculate_cost
 from backend.app.providers.prompt_builder import ANALYSIS_SYSTEM_PROMPT, build_analysis_user_prompt
+from backend.app.providers.http_utils import execute_provider_request_with_retry
 
 class GeminiProvider(BaseAIProvider):
     @property
@@ -16,9 +17,8 @@ class GeminiProvider(BaseAIProvider):
             return False
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key.strip()}"
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url)
-                return resp.status_code == 200
+            resp = await execute_provider_request_with_retry("GET", url, timeout=10.0, max_retries=1)
+            return resp.status_code == 200
         except Exception:
             return False
 
@@ -52,43 +52,44 @@ class GeminiProvider(BaseAIProvider):
             }
         }
 
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code != 200:
-                raise RuntimeError(f"Gemini API error ({resp.status_code}): {resp.text}")
-            
-            data = resp.json()
-            candidates = data.get("candidates", [])
-            if not candidates:
-                raise RuntimeError("No candidate response returned from Gemini")
-            
-            raw_text = candidates[0]["content"]["parts"][0]["text"]
-            usage = data.get("usageMetadata", {})
-            in_tokens = usage.get("promptTokenCount", 0)
-            out_tokens = usage.get("candidatesTokenCount", 0)
-            cost = calculate_cost("gemini", model, in_tokens, out_tokens)
+        resp = await execute_provider_request_with_retry(
+            "POST", url, json_data=payload, timeout=45.0, max_retries=2
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Gemini API error ({resp.status_code}): {resp.text}")
+        
+        data = resp.json()
+        candidates = data.get("candidates", [])
+        if not candidates:
+            raise RuntimeError("No candidate response returned from Gemini")
+        
+        raw_text = candidates[0]["content"]["parts"][0]["text"]
+        usage = data.get("usageMetadata", {})
+        in_tokens = usage.get("promptTokenCount", 0)
+        out_tokens = usage.get("candidatesTokenCount", 0)
+        cost = calculate_cost("gemini", model, in_tokens, out_tokens)
 
-            parsed = json.loads(raw_text)
-            conf = parsed.get("confidence", {})
-            if isinstance(conf, str):
-                conf = {"level": "medium", "reason": conf}
+        parsed = json.loads(raw_text)
+        conf = parsed.get("confidence", {})
+        if isinstance(conf, str):
+            conf = {"level": "medium", "reason": conf}
 
-            return QuestionAnalysisResult(
-                question=parsed.get("question", question_text),
-                suggested_answer=parsed.get("suggested_answer", "A").upper(),
-                answer_text=parsed.get("answer_text", options.get(parsed.get("suggested_answer", "A"), "")),
-                explanation=parsed.get("explanation", ""),
-                option_analysis=parsed.get("option_analysis", {}),
-                confidence=ConfidenceModel(
-                    level=conf.get("level", "high"),
-                    reason=conf.get("reason", "Direct deductive and empirical verification")
-                ),
-                subject=parsed.get("subject", subject or "General"),
-                needs_review=parsed.get("needs_review", False),
-                input_tokens=in_tokens,
-                output_tokens=out_tokens,
-                estimated_cost=cost
-            )
+        return QuestionAnalysisResult(
+            question=parsed.get("question", question_text),
+            suggested_answer=parsed.get("suggested_answer", "A").upper(),
+            answer_text=parsed.get("answer_text", options.get(parsed.get("suggested_answer", "A"), "")),
+            explanation=parsed.get("explanation", ""),
+            option_analysis=parsed.get("option_analysis", {}),
+            confidence=ConfidenceModel(
+                level=conf.get("level", "high"),
+                reason=conf.get("reason", "Direct deductive and empirical verification")
+            ),
+            subject=parsed.get("subject", subject or "General"),
+            needs_review=parsed.get("needs_review", False),
+            input_tokens=in_tokens,
+            output_tokens=out_tokens,
+            estimated_cost=cost
+        )
 
     async def chat(
         self,
@@ -114,22 +115,22 @@ class GeminiProvider(BaseAIProvider):
         if system_prompt:
             payload["system_instruction"] = {"parts": [{"text": system_prompt}]}
 
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code != 200:
-                raise RuntimeError(f"Gemini API error ({resp.status_code}): {resp.text}")
-            data = resp.json()
-            candidates = data.get("candidates", [])
-            text = candidates[0]["content"]["parts"][0]["text"] if candidates else ""
-            usage = data.get("usageMetadata", {})
-            in_tokens = usage.get("promptTokenCount", 0)
-            out_tokens = usage.get("candidatesTokenCount", 0)
-            cost = calculate_cost("gemini", model, in_tokens, out_tokens)
+        resp = await execute_provider_request_with_retry(
+            "POST", url, json_data=payload, timeout=45.0, max_retries=2
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Gemini API error ({resp.status_code}): {resp.text}")
+        data = resp.json()
+        candidates = data.get("candidates", [])
+        text = candidates[0]["content"]["parts"][0]["text"] if candidates else ""
+        usage = data.get("usageMetadata", {})
+        in_tokens = usage.get("promptTokenCount", 0)
+        out_tokens = usage.get("candidatesTokenCount", 0)
+        cost = calculate_cost("gemini", model, in_tokens, out_tokens)
 
-            return {
-                "content": text,
-                "input_tokens": in_tokens,
-                "output_tokens": out_tokens,
-                "estimated_cost": cost
-            }
-
+        return {
+            "content": text,
+            "input_tokens": in_tokens,
+            "output_tokens": out_tokens,
+            "estimated_cost": cost
+        }
