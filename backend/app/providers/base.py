@@ -70,7 +70,8 @@ class BaseAIProvider(ABC):
         question_text: str,
         options: Dict[str, str],
         subject: Optional[str] = None,
-        context_material: Optional[str] = None
+        context_material: Optional[str] = None,
+        structured_options: Optional[List[Dict[str, Any]]] = None
     ) -> QuestionAnalysisResult:
         """Analyzes an MCQ and returns strict Pydantic QuestionAnalysisResult."""
         pass

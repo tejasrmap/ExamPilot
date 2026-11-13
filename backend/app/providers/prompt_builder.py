@@ -60,8 +60,16 @@ def build_analysis_user_prompt(
         prompt += f"REFERENCE STUDY CONTEXT:\n{context_material}\n\n"
     
     prompt += f"QUESTION:\n{question_text}\n\nOPTIONS:\n"
-    for letter, text in sorted(options.items()):
-        prompt += f"{letter}: {text}\n"
+    if structured_options:
+        for opt in structured_options:
+            lbl = opt.get("internal_label", "")
+            txt = opt.get("text", "")
+            orig = opt.get("original_label")
+            orig_str = f" [Original Label: {orig}]" if orig else ""
+            prompt += f"{lbl}: {txt}{orig_str}\n"
+    else:
+        for letter, text in sorted(options.items()):
+            prompt += f"{letter}: {text}\n"
     
     prompt += "\nEvaluate each option and output the final validated JSON analysis."
     return prompt

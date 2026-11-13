@@ -109,7 +109,8 @@ async def analyse_question(
             question_text=req.question_text,
             options=req.options,
             subject=detected_subject,
-            context_material=req.context_material
+            context_material=req.context_material,
+            structured_options=req.structured_options
         )
     except Exception as e:
         raise HTTPException(
@@ -125,15 +126,43 @@ async def analyse_question(
         result.evidence = domain_details.get("evidence")
 
     if req.structured_options:
-        result.structured_options = [
+        structured_list = [
             OptionIdentity(**o) if isinstance(o, dict) else o for o in req.structured_options
         ]
-        matching_opt = next((o for o in req.structured_options if o.get("internal_label") == result.suggested_answer), None)
+        result.structured_options = structured_list
+        matching_opt = None
+        for o in structured_list:
+            if o.internal_label.upper() == result.suggested_answer.upper():
+                matching_opt = o
+                break
+            if o.original_label and o.original_label.upper() == result.suggested_answer.upper():
+                matching_opt = o
+                break
+            if o.text.strip().lower() == result.answer_text.strip().lower():
+                matching_opt = o
+                break
+
         if matching_opt:
-            result.original_label = matching_opt.get("original_label")
-            result.source_position = matching_opt.get("source_order")
+            result.original_label = matching_opt.original_label
+            result.source_position = matching_opt.source_order
+            if not result.answer_text or result.answer_text not in [so.text for so in structured_list]:
+                result.answer_text = matching_opt.text
+            result.suggested_answer = matching_opt.internal_label
     else:
         result.source_position = (ord(result.suggested_answer.upper()) - ord('A') + 1) if len(result.suggested_answer) == 1 and result.suggested_answer.isalpha() else None
+        legacy_structured = []
+        for idx, (lbl, txt) in enumerate(sorted(req.options.items())):
+            legacy_structured.append(OptionIdentity(
+                id=f"opt_{idx+1}",
+                text=txt,
+                original_label=lbl,
+                internal_label=lbl,
+                source_order=idx + 1,
+                confidence=1.0,
+                is_user_edited=False
+            ))
+        result.structured_options = legacy_structured
+        result.original_label = result.suggested_answer
 
     # 5. Persist Question to History
     # Find or create subject record

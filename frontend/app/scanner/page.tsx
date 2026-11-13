@@ -29,6 +29,7 @@ export default function ScannerPage() {
     C: "",
     D: ""
   });
+  const [structuredOptions, setStructuredOptions] = useState<any[]>([]);
   const [detectedDomain, setDetectedDomain] = useState("Computer Science");
   const [analysisResult, setAnalysisResult] = useState<QuestionAnalysis | null>(null);
   const [copied, setCopied] = useState(false);
@@ -60,6 +61,20 @@ export default function ScannerPage() {
       if (data.options && Object.keys(data.options).length > 0) {
         setOptions(data.options);
       }
+      if (data.structured_options && data.structured_options.length > 0) {
+        setStructuredOptions(data.structured_options);
+      } else if (data.options && Object.keys(data.options).length > 0) {
+        const generated = Object.entries(data.options).map(([k, v], idx) => ({
+          id: `opt_${idx + 1}`,
+          text: v,
+          original_label: data.has_original_labels ? k : null,
+          internal_label: k,
+          source_order: idx + 1,
+          confidence: data.ocr_confidence || 1.0,
+          is_user_edited: false
+        }));
+        setStructuredOptions(generated);
+      }
       if (data.detected_domain) {
         setDetectedDomain(data.detected_domain);
       }
@@ -86,14 +101,50 @@ export default function ScannerPage() {
 
   const handleOptionChange = (key: string, value: string) => {
     setOptions(prev => ({ ...prev, [key]: value }));
+    setStructuredOptions(prev => {
+      const idx = prev.findIndex(o => o.internal_label === key);
+      if (idx !== -1) {
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          text: value,
+          is_user_edited: true
+        };
+        return updated;
+      }
+      return [
+        ...prev,
+        {
+          id: `opt_${Date.now()}_${key}`,
+          text: value,
+          original_label: null,
+          internal_label: key,
+          source_order: prev.length + 1,
+          confidence: 1.0,
+          is_user_edited: true
+        }
+      ];
+    });
   };
 
   const addOption = () => {
-    const keys = ["A", "B", "C", "D", "E", "F"];
+    const keys = ["A", "B", "C", "D", "E", "F", "G", "H"];
     const existing = Object.keys(options);
     const nextKey = keys.find(k => !existing.includes(k));
     if (nextKey) {
       setOptions(prev => ({ ...prev, [nextKey]: "" }));
+      setStructuredOptions(prev => [
+        ...prev,
+        {
+          id: `opt_${Date.now()}_${nextKey}`,
+          text: "",
+          original_label: null,
+          internal_label: nextKey,
+          source_order: prev.length + 1,
+          confidence: 1.0,
+          is_user_edited: true
+        }
+      ]);
     }
   };
 
@@ -101,6 +152,10 @@ export default function ScannerPage() {
     const updated = { ...options };
     delete updated[key];
     setOptions(updated);
+    setStructuredOptions(prev => {
+      const filtered = prev.filter(o => o.internal_label !== key);
+      return filtered.map((o, idx) => ({ ...o, source_order: idx + 1 }));
+    });
   };
 
   const handleAnalyze = async () => {
@@ -121,9 +176,17 @@ export default function ScannerPage() {
     setLoadingAi(true);
 
     try {
+      const cleanStructured = structuredOptions
+        .filter(o => o.internal_label in cleanOpts)
+        .map(o => ({
+          ...o,
+          text: cleanOpts[o.internal_label]
+        }));
+
       const res = await api.analyseQuestion({
         question_text: questionText,
         options: cleanOpts,
+        structured_options: cleanStructured.length > 0 ? cleanStructured : undefined,
         subject: detectedDomain
       });
       setAnalysisResult(res);
@@ -136,7 +199,10 @@ export default function ScannerPage() {
 
   const copyExplanation = () => {
     if (!analysisResult) return;
-    const txt = `Correct Answer: Option ${analysisResult.suggested_answer} (${analysisResult.answer_text})\n\nExplanation:\n${analysisResult.explanation}`;
+    const header = analysisResult.original_label
+      ? `Correct Answer: Option ${analysisResult.original_label}: ${analysisResult.answer_text}`
+      : `Correct Answer: ${analysisResult.answer_text} (Item #${analysisResult.source_position || 1})`;
+    const txt = `${header}\n\nExplanation:\n${analysisResult.explanation}`;
     navigator.clipboard.writeText(txt);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

@@ -395,3 +395,265 @@ def test_cross_architecture_parser_equivalence():
         assert len(d_res["structured_options"]) == len(b_res["structured_options"])
         for i in range(len(d_res["structured_options"])):
             assert d_res["structured_options"][i] == b_res["structured_options"][i]
+
+# ---------------------------------------------------------------------------
+# FIXTURE 12: Copying Unlettered vs Lettered Answers
+# ---------------------------------------------------------------------------
+def format_copied_answer(original_label, answer_text, source_position, explanation):
+    """Mirror exact copy logic in frontend/app/scanner/page.tsx"""
+    header = (
+        f"Correct Answer: Option {original_label}: {answer_text}"
+        if original_label
+        else f"Correct Answer: {answer_text} (Item #{source_position or 1})"
+    )
+    return f"{header}\n\nExplanation:\n{explanation}"
+
+def test_copying_unlettered_answer():
+    copied = format_copied_answer(
+        original_label=None,
+        answer_text="Database",
+        source_position=2,
+        explanation="A structured system used by organizations to securely store data."
+    )
+    assert copied.startswith("Correct Answer: Database (Item #2)")
+    assert "Option" not in copied.splitlines()[0]
+    assert "Explanation:\nA structured system" in copied
+
+def test_copying_lettered_answer():
+    copied = format_copied_answer(
+        original_label="C",
+        answer_text="Database",
+        source_position=3,
+        explanation="A structured system used by organizations to securely store data."
+    )
+    assert copied.startswith("Correct Answer: Option C: Database")
+    assert "Explanation:\nA structured system" in copied
+
+# ---------------------------------------------------------------------------
+# FIXTURE 13: Preserving Option Identity After Manual Editing
+# ---------------------------------------------------------------------------
+def test_preserving_option_identity_after_manual_editing():
+    text = (
+        "What is the term for the computer software system in which organizations securely store data?\n"
+        "Cache\n"
+        "Datbase\n"
+        "Catalog\n"
+        "Data ecosystem"
+    )
+    parser = BackendParser()
+    parsed = parser.parse_from_text(text)
+    
+    # Verify initial extracted options
+    opts = parsed["structured_options"]
+    assert len(opts) == 4
+    target = opts[1] # "Datbase"
+    assert target["id"] == "opt_2"
+    assert target["source_order"] == 2
+    assert target["original_label"] is None
+    assert target["is_user_edited"] is False
+
+    # Simulate student manual edit fixing typo in UI
+    edited_opts = []
+    for opt in opts:
+        if opt["id"] == "opt_2":
+            edited_opts.append({
+                **opt,
+                "text": "Database",
+                "is_user_edited": True
+            })
+        else:
+            edited_opts.append(dict(opt))
+
+    # Verify identity, position, and label are preserved while text and flag update
+    assert edited_opts[1]["id"] == "opt_2"
+    assert edited_opts[1]["source_order"] == 2
+    assert edited_opts[1]["original_label"] is None
+    assert edited_opts[1]["internal_label"] == "B"
+    assert edited_opts[1]["text"] == "Database"
+    assert edited_opts[1]["is_user_edited"] is True
+
+# ---------------------------------------------------------------------------
+# FIXTURE 14: Preserving Option Identity Through API Request and Response
+# ---------------------------------------------------------------------------
+def test_preserving_option_identity_through_api_request_response():
+    from unittest.mock import AsyncMock, patch
+    from fastapi.testclient import TestClient
+    from backend.app.main import app
+    from backend.app.providers.base import QuestionAnalysisResult, ConfidenceModel, OptionIdentity
+
+    client = TestClient(app)
+
+    # Register/login test user
+    email = "option_id_audit@exampilot.com"
+    pwd = "AuditPassword123!"
+    reg_res = client.post("/api/auth/register", json={"email": email, "password": pwd, "display_name": "Auditor"})
+    if reg_res.status_code == 200:
+        token = reg_res.json()["access_token"]
+    else:
+        login_res = client.post("/api/auth/login", json={"email": email, "password": pwd})
+        token = login_res.json()["access_token"]
+
+    headers = {"Authorization": f"Bearer {token}"}
+    client.post("/api/providers", headers=headers, json={
+        "provider": "openai",
+        "api_key": "sk-proj-testkey1234567890abcdef1234",
+        "default_model": "gpt-4o-mini",
+        "is_default": True
+    })
+
+    # Mock provider generate_analysis to return structured answer
+    mock_result = QuestionAnalysisResult(
+        question="What is the term for the computer software system in which organizations store data?",
+        suggested_answer="B",
+        answer_text="Database",
+        explanation="A database provides secure multi-user structured storage.",
+        option_analysis={"A": "Incorrect", "B": "Correct", "C": "Incorrect", "D": "Incorrect"},
+        confidence=ConfidenceModel(level="high", reason="Core computer systems standard"),
+        subject="Computer Science"
+    )
+
+    req_payload = {
+        "question_text": "What is the term for the computer software system in which organizations store data?",
+        "options": {
+            "A": "Cache",
+            "B": "Database",
+            "C": "Catalog",
+            "D": "Data ecosystem"
+        },
+        "structured_options": [
+            {"id": "opt_1", "text": "Cache", "original_label": None, "internal_label": "A", "source_order": 1, "confidence": 0.99, "is_user_edited": False},
+            {"id": "opt_2", "text": "Database", "original_label": None, "internal_label": "B", "source_order": 2, "confidence": 0.98, "is_user_edited": True},
+            {"id": "opt_3", "text": "Catalog", "original_label": None, "internal_label": "C", "source_order": 3, "confidence": 0.97, "is_user_edited": False},
+            {"id": "opt_4", "text": "Data ecosystem", "original_label": None, "internal_label": "D", "source_order": 4, "confidence": 0.99, "is_user_edited": False}
+        ],
+        "subject": "Computer Science"
+    }
+
+    with patch("backend.app.providers.openai_provider.OpenAIProvider.generate_analysis", new_callable=AsyncMock) as mock_gen:
+        mock_gen.return_value = mock_result
+        resp = client.post("/api/questions/analyse", headers=headers, json=req_payload)
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    # Verify unlettered identity: original_label is None, source_position is 2
+    assert data["original_label"] is None
+    assert data["source_position"] == 2
+    assert data["answer_text"] == "Database"
+    assert "structured_options" in data
+    assert len(data["structured_options"]) == 4
+
+    # Verify option 2 maintained is_user_edited=True and its identity
+    opt2 = data["structured_options"][1]
+    assert opt2["id"] == "opt_2"
+    assert opt2["text"] == "Database"
+    assert opt2["original_label"] is None
+    assert opt2["source_order"] == 2
+    assert opt2["is_user_edited"] is True
+
+# ---------------------------------------------------------------------------
+# FIXTURE 15: Correct Answer Display After Shuffled Option Sequence
+# ---------------------------------------------------------------------------
+def test_correct_answer_display_after_shuffled_option_sequence():
+    """
+    Online platforms randomize option orders between quiz attempts.
+    Attempt 1: Database is Item #1.
+    Attempt 2: Database is Item #3.
+    Display must cleanly show Item #1 and Item #3 respectively without inventing letters.
+    """
+    attempt1_text = (
+        "What is the term for the computer software system in which organizations securely store data?\n"
+        "Database\n"
+        "Data ecosystem\n"
+        "Cache\n"
+        "Catalog"
+    )
+    attempt2_text = (
+        "What is the term for the computer software system in which organizations securely store data?\n"
+        "Data ecosystem\n"
+        "Cache\n"
+        "Database\n"
+        "Catalog"
+    )
+    p = BackendParser()
+    res1 = p.parse_from_text(attempt1_text)
+    res2 = p.parse_from_text(attempt2_text)
+
+    # In Attempt 1, "Database" is source_order 1
+    db_opt1 = next(o for o in res1["structured_options"] if o["text"] == "Database")
+    assert db_opt1["source_order"] == 1
+    assert db_opt1["original_label"] is None
+    display1 = f"{db_opt1['text']} (Item #{db_opt1['source_order']})"
+    assert display1 == "Database (Item #1)"
+
+    # In Attempt 2, "Database" is source_order 3
+    db_opt2 = next(o for o in res2["structured_options"] if o["text"] == "Database")
+    assert db_opt2["source_order"] == 3
+    assert db_opt2["original_label"] is None
+    display2 = f"{db_opt2['text']} (Item #{db_opt2['source_order']})"
+    assert display2 == "Database (Item #3)"
+
+# ---------------------------------------------------------------------------
+# FIXTURE 16: Backward Compatibility with Dictionary-Based Requests
+# ---------------------------------------------------------------------------
+def test_backward_compatibility_with_dictionary_based_requests():
+    """
+    Legacy clients sending only 'options': {'A': ..., 'B': ...} without structured_options
+    must be fully supported without errors.
+    """
+    from unittest.mock import AsyncMock, patch
+    from fastapi.testclient import TestClient
+    from backend.app.main import app
+    from backend.app.providers.base import QuestionAnalysisResult, ConfidenceModel
+
+    client = TestClient(app)
+
+    # Auth
+    email = "legacy_compat@exampilot.com"
+    pwd = "LegacyPassword123!"
+    reg_res = client.post("/api/auth/register", json={"email": email, "password": pwd, "display_name": "Legacy Client"})
+    token = reg_res.json()["access_token"] if reg_res.status_code == 200 else client.post("/api/auth/login", json={"email": email, "password": pwd}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    client.post("/api/providers", headers=headers, json={
+        "provider": "openai",
+        "api_key": "sk-proj-testkey1234567890abcdef1234",
+        "default_model": "gpt-4o-mini",
+        "is_default": True
+    })
+
+    mock_result = QuestionAnalysisResult(
+        question="Which transport protocol provides reliable byte-stream transmission?",
+        suggested_answer="A",
+        answer_text="TCP",
+        explanation="TCP is connection-oriented and guarantees ordered delivery.",
+        option_analysis={"A": "Correct: TCP is reliable", "B": "Incorrect: UDP is unreliable"},
+        confidence=ConfidenceModel(level="high", reason="Networking standard"),
+        subject="Networking"
+    )
+
+    legacy_payload = {
+        "question_text": "Which transport protocol provides reliable byte-stream transmission?",
+        "options": {
+            "A": "TCP",
+            "B": "UDP"
+        },
+        "subject": "Networking"
+    }
+
+    with patch("backend.app.providers.openai_provider.OpenAIProvider.generate_analysis", new_callable=AsyncMock) as mock_gen:
+        mock_gen.return_value = mock_result
+        resp = client.post("/api/questions/analyse", headers=headers, json=legacy_payload)
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["suggested_answer"] == "A"
+    assert data["answer_text"] == "TCP"
+    assert data["original_label"] == "A"
+    assert data["source_position"] == 1
+    assert "structured_options" in data
+    assert len(data["structured_options"]) == 2
+    assert data["structured_options"][0]["internal_label"] == "A"
+    assert data["structured_options"][0]["text"] == "TCP"
+
+

@@ -32,9 +32,12 @@ class GeminiProvider(BaseAIProvider):
         question_text: str,
         options: Dict[str, str],
         subject: Optional[str] = None,
-        context_material: Optional[str] = None
+        context_material: Optional[str] = None,
+        structured_options: Optional[List[Dict[str, Any]]] = None
     ) -> QuestionAnalysisResult:
-        user_prompt = build_analysis_user_prompt(question_text, options, subject, context_material)
+        user_prompt = build_analysis_user_prompt(
+            question_text, options, subject, context_material, structured_options=structured_options
+        )
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key.strip()}"
         
         payload = {
